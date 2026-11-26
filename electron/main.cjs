@@ -374,24 +374,65 @@ ipcMain.handle('control:input', async (event, payload) => {
   return { success: false };
 });
 
-// Save recording dialog
-ipcMain.handle('recording:save', async (event, { defaultName, buffer }) => {
+// Save recording dialog — selalu simpan sebagai MP4 (konversi dari WebM via ffmpeg)
+ipcMain.handle('recording:save', async (event, { defaultName, buffer, convertToMp4 }) => {
   if (!mainWindow) return null;
-  const ext = defaultName?.split('.').pop()?.toLowerCase() || 'webm';
-  const filters = ext === 'mp4'
-    ? [{ name: 'Video MP4', extensions: ['mp4'] }, { name: 'Video WebM', extensions: ['webm'] }]
-    : [{ name: 'Video WebM', extensions: ['webm'] }, { name: 'Video MP4', extensions: ['mp4'] }];
+
+  const filters = [
+    { name: 'Video MP4', extensions: ['mp4'] },
+    { name: 'Video WebM', extensions: ['webm'] },
+  ];
+  const mp4Name = (defaultName || `MirrorEuy_${Date.now()}.webm`).replace(/\.webm$/i, '.mp4');
 
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Simpan Rekaman Mirror Euy',
-    defaultPath: defaultName || `MirrorEuy_${Date.now()}.${ext}`,
+    defaultPath: mp4Name,
     filters,
   });
 
   if (!result.canceled && result.filePath) {
     try {
-      fs.writeFileSync(result.filePath, Buffer.from(buffer));
-      return { success: true, path: result.filePath };
+      const savePath = result.filePath;
+      const isMp4Out = savePath.toLowerCase().endsWith('.mp4');
+
+      if (isMp4Out && convertToMp4) {
+        // Simpan WebM sementara lalu konversi ke MP4 pakai ffmpeg-static
+        const tmpPath = path.join(os.tmpdir(), `mirroreuy_tmp_${Date.now()}.webm`);
+        fs.writeFileSync(tmpPath, Buffer.from(buffer));
+
+        let ffmpegPath;
+        try { ffmpegPath = require('ffmpeg-static'); } catch { ffmpegPath = null; }
+
+        if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+          await new Promise((resolve, reject) => {
+            const args = [
+              '-y', '-i', tmpPath,
+              '-c:v', 'copy',
+              '-c:a', 'aac',
+              '-movflags', '+faststart',
+              savePath,
+            ];
+            const { spawn } = require('child_process');
+            const proc = spawn(ffmpegPath, args);
+            proc.on('close', (code) => {
+              try { fs.unlinkSync(tmpPath); } catch {}
+              if (code === 0) resolve(true);
+              else reject(new Error(`ffmpeg exit code ${code}`));
+            });
+            proc.on('error', (err) => {
+              try { fs.unlinkSync(tmpPath); } catch {}
+              reject(err);
+            });
+          });
+        } else {
+          // ffmpeg tidak ada, simpan langsung sebagai webm
+          fs.writeFileSync(savePath, Buffer.from(buffer));
+        }
+      } else {
+        fs.writeFileSync(savePath, Buffer.from(buffer));
+      }
+
+      return { success: true, path: savePath };
     } catch (err) {
       return { success: false, error: err.message };
     }

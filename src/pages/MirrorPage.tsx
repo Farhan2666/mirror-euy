@@ -547,16 +547,36 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     if (!canvas) return;
     chunksRef.current = [];
 
+    // Pastikan AudioContext & audioRecordDestRef sudah ada sebelum rekam
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
+      nextAudioTimeRef.current = audioCtxRef.current.currentTime;
+      audioRecordDestRef.current = audioCtxRef.current.createMediaStreamDestination();
+    }
+    if (!audioRecordDestRef.current) {
+      audioRecordDestRef.current = audioCtxRef.current.createMediaStreamDestination();
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume().catch(() => {});
+    }
+
     // Gabungkan video dari canvas + audio dari Web Audio API
     const videoStream = canvas.captureStream(60);
-    const audioTrack = audioRecordDestRef.current?.stream.getAudioTracks()[0];
+
+    // Tambahkan audio track — buat silent node dulu agar track selalu ada
+    const ctx = audioCtxRef.current;
+    const silentBuffer = ctx.createBuffer(2, ctx.sampleRate * 0.1, ctx.sampleRate);
+    const silentSrc = ctx.createBufferSource();
+    silentSrc.buffer = silentBuffer;
+    silentSrc.loop = true;
+    silentSrc.connect(audioRecordDestRef.current);
+    silentSrc.start();
+
+    const audioTrack = audioRecordDestRef.current.stream.getAudioTracks()[0];
     if (audioTrack) videoStream.addTrack(audioTrack);
 
-    // Pilih format terbaik yang didukung Electron: MP4 lebih kompatibel di Windows
+    // Pilih format terbaik yang didukung Electron: coba webm dulu (pasti support), nanti dikonversi ke mp4 di main process
     const formatCandidates = [
-      { mimeType: 'video/mp4;codecs=avc1,mp4a.40.2', ext: 'mp4' },
-      { mimeType: 'video/mp4;codecs=avc1', ext: 'mp4' },
-      { mimeType: 'video/mp4', ext: 'mp4' },
       { mimeType: 'video/webm;codecs=vp9,opus', ext: 'webm' },
       { mimeType: 'video/webm;codecs=vp8,opus', ext: 'webm' },
       { mimeType: 'video/webm', ext: 'webm' },
@@ -569,18 +589,20 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorder.onstop = async () => {
+      silentSrc.stop();
+      silentSrc.disconnect();
       const blob = new Blob(chunksRef.current, { type: chosenFormat.mimeType });
       const arrayBuf = await blob.arrayBuffer();
       const api = (window as any).electronAPI;
       if (api?.saveRecording) {
         await api.saveRecording({
-          defaultName: `MirrorEuy_${Date.now()}.${chosenFormat.ext}`,
+          defaultName: `MirrorEuy_${Date.now()}.webm`,
           buffer: new Uint8Array(arrayBuf),
-          ext: chosenFormat.ext,
+          convertToMp4: true,
         });
       }
     };
-    recorder.start();
+    recorder.start(1000); // timeslice 1 detik agar data tidak hilang jika crash
     recorderRef.current = recorder;
     setIsRecording(true);
   };
