@@ -44,13 +44,45 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
     let frameCount = 0;
     let lastFpsTick = performance.now();
     let lastFrameArrival = performance.now();
+    let isDecoding = false;
+    let pendingFrame: Uint8Array | null = null;
+
+    const decodeAndDraw = async (frameBytes: Uint8Array) => {
+      isDecoding = true;
+      try {
+        const jpegBlob = new Blob([new Uint8Array(frameBytes)], { type: 'image/jpeg' });
+        const bitmap = await createImageBitmap(jpegBlob);
+        const canvas = canvasRef.current;
+        if (canvas) {
+          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            setCanvasSize({ width: bitmap.width, height: bitmap.height });
+            setOrientation(bitmap.width > bitmap.height ? 'landscape' : 'portrait');
+          }
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(bitmap, 0, 0);
+        }
+        bitmap.close();
+        setStatusText('Live');
+      } catch {
+      } finally {
+        isDecoding = false;
+        // Always jump straight to the newest arrived frame, dropping stale ones
+        if (pendingFrame) {
+          const next = pendingFrame;
+          pendingFrame = null;
+          decodeAndDraw(next);
+        }
+      }
+    };
 
     ws.onopen = () => {
       setStatus('live');
       setStatusText('Terhubung (Menunggu frame...)');
     };
 
-    ws.onmessage = async (event) => {
+    ws.onmessage = (event) => {
       if (typeof event.data === 'string') {
         try {
           const info = JSON.parse(event.data);
@@ -77,23 +109,12 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
         lastFpsTick = now;
       }
 
-      const jpegBlob = new Blob([buf.subarray(1)], { type: 'image/jpeg' });
-      try {
-        const bitmap = await createImageBitmap(jpegBlob);
-        const canvas = canvasRef.current;
-        if (canvas) {
-          if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            setCanvasSize({ width: bitmap.width, height: bitmap.height });
-            setOrientation(bitmap.width > bitmap.height ? 'landscape' : 'portrait');
-          }
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(bitmap, 0, 0);
-        }
-        bitmap.close();
-        setStatusText('Live');
-      } catch {}
+      const jpegData = buf.subarray(1);
+      if (isDecoding) {
+        pendingFrame = jpegData;
+      } else {
+        decodeAndDraw(jpegData);
+      }
     };
 
     ws.onerror = () => {

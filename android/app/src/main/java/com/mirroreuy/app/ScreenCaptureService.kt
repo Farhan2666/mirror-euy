@@ -29,6 +29,7 @@ import org.java_websocket.server.WebSocketServer
 import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ScreenCaptureService : Service() {
 
@@ -61,13 +62,15 @@ class ScreenCaptureService : Service() {
     private var captureThread: HandlerThread? = null
     private var captureHandler: Handler? = null
 
-    private var streamWidth = 720
-    private var streamHeight = 1280
+    private var streamWidth = 540
+    private var streamHeight = 960
     private var targetFps = 30
-    private var jpegQuality = 72
+    private var jpegQuality = 55
     private var lastFrameTime = 0L
     private var fpsCounter = 0
     private var fpsTickTime = 0L
+    private val isProcessingFrame = AtomicBoolean(false)
+    private val jpegOut = ByteArrayOutputStream(65536)
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -89,9 +92,9 @@ class ScreenCaptureService : Service() {
                     intent.getParcelableExtra(EXTRA_DATA)
                 }
 
-                streamWidth = intent.getIntExtra(EXTRA_WIDTH, 720)
+                streamWidth = intent.getIntExtra(EXTRA_WIDTH, 540)
                 targetFps = intent.getIntExtra(EXTRA_FPS, 30)
-                jpegQuality = intent.getIntExtra(EXTRA_QUALITY, 72)
+                jpegQuality = intent.getIntExtra(EXTRA_QUALITY, 55)
 
                 if (resultCode == Activity.RESULT_OK && data != null) {
                     try {
@@ -138,12 +141,12 @@ class ScreenCaptureService : Service() {
 
             wsServer = StreamWebSocketServer(InetSocketAddress("0.0.0.0", WS_PORT)).apply {
                 isReuseAddr = true
+                isTcpNoDelay = true
                 start()
             }
 
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             mediaProjection = projectionManager.getMediaProjection(resultCode, data)
-            // Mandatory on Android 14+ (API 34) before createVirtualDisplay
             mediaProjection?.registerCallback(projectionCallback, captureHandler)
 
             val minFrameIntervalMs = (1000L / targetFps.coerceAtLeast(1)).coerceAtLeast(14L)
@@ -157,6 +160,16 @@ class ScreenCaptureService : Service() {
                     if (now - lastFrameTime < minFrameIntervalMs || connectedClients <= 0) {
                         return@setOnImageAvailableListener
                     }
+
+                    // Drop frame immediately if previous frame is still encoding or socket buffer is backed up
+                    val conns = wsServer?.connections
+                    if (conns.isNullOrEmpty() || conns.all { it.hasBufferedData() }) {
+                        return@setOnImageAvailableListener
+                    }
+                    if (!isProcessingFrame.compareAndSet(false, true)) {
+                        return@setOnImageAvailableListener
+                    }
+
                     lastFrameTime = now
 
                     val planes = image.planes
@@ -180,17 +193,21 @@ class ScreenCaptureService : Service() {
                         bitmap
                     }
 
-                    val out = ByteArrayOutputStream()
-                    cropped.compress(Bitmap.CompressFormat.JPEG, jpegQuality, out)
+                    jpegOut.reset()
+                    cropped.compress(Bitmap.CompressFormat.JPEG, jpegQuality, jpegOut)
                     cropped.recycle()
 
-                    val jpegBytes = out.toByteArray()
+                    val jpegBytes = jpegOut.toByteArray()
                     val packet = ByteBuffer.allocate(1 + jpegBytes.size)
                     packet.put(0x01.toByte())
                     packet.put(jpegBytes)
                     packet.flip()
 
-                    wsServer?.broadcast(packet)
+                    for (conn in conns) {
+                        if (conn.isOpen && !conn.hasBufferedData()) {
+                            conn.send(packet.duplicate())
+                        }
+                    }
 
                     fpsCounter++
                     if (now - fpsTickTime >= 1000L) {
@@ -200,6 +217,7 @@ class ScreenCaptureService : Service() {
                     }
                 } catch (_: Exception) {
                 } finally {
+                    isProcessingFrame.set(false)
                     image.close()
                 }
             }, captureHandler)
