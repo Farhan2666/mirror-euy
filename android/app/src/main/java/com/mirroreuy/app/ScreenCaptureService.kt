@@ -28,6 +28,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
@@ -72,6 +73,9 @@ class ScreenCaptureService : Service() {
     private var wsServer: StreamWebSocketServer? = null
     private var captureThread: HandlerThread? = null
     private var captureHandler: Handler? = null
+
+    // WakeLock — cegah CPU & WiFi dibekukan saat streaming
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private var mediaCodec: MediaCodec? = null
     private var encoderSurface: Surface? = null
@@ -516,6 +520,8 @@ class ScreenCaptureService : Service() {
         try { mediaProjection?.stop() } catch (_: Exception) {}
         try { wsServer?.stop(300) } catch (_: Exception) {}
         try { captureThread?.quitSafely() } catch (_: Exception) {}
+        try { if (wakeLock?.isHeld == true) wakeLock?.release() } catch (_: Exception) {}
+        wakeLock = null
         audioRecord = null
         audioThread = null
         virtualDisplay = null

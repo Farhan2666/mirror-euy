@@ -6,14 +6,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -89,6 +92,7 @@ class MainActivity : AppCompatActivity() {
         chipGroupFps = findViewById(R.id.chipGroupFps)
 
         requestNotificationPermissionIfNeeded()
+        requestIgnoreBatteryOptimizations()
         updateConnectionBanner()
 
         chipGroupConn.setOnCheckedStateChangeListener { _, _ ->
@@ -171,6 +175,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvMetrics.text = "PC Terhubung: $clients | FPS: $fps"
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            AlertDialog.Builder(this)
+                .setTitle("Izinkan Berjalan Terus")
+                .setMessage(
+                    "Mirror Euy butuh berjalan terus di latar belakang agar mirroring tidak terputus. " +
+                    "Tekan Izinkan pada layar berikutnya."
+                )
+                .setPositiveButton("Lanjut") { _, _ ->
+                    try {
+                        val intent = Intent(
+                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                    } catch (_: Exception) {}
+                }
+                .setNegativeButton("Nanti") { d, _ -> d.dismiss() }
+                .show()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {
