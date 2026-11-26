@@ -5,6 +5,7 @@ import {
   MousePointerClick, ArrowLeft, Home, Layers, Tv2, X, Move
 } from 'lucide-react';
 import { MirrorSession } from '../App';
+import { YuvWebGLRenderer } from '../utils/yuvRenderer';
 
 interface MirrorPageProps {
   session: MirrorSession;
@@ -55,6 +56,13 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   // Web Audio API PCM16 player refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const nextAudioTimeRef = useRef<number>(0);
+
+  // H.264 TinyH264 Worker + WebGL YUV renderer refs
+  const h264WorkerRef = useRef<Worker | null>(null);
+  const h264ReadyRef = useRef<boolean>(false);
+  const h264QueueRef = useRef<Uint8Array[]>([]);
+  const yuvRendererRef = useRef<YuvWebGLRenderer | null>(null);
+  const yuvRendererCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const playPcmAudio = (pcmBytes: Uint8Array) => {
     if (isMutedRef.current) return;
@@ -128,6 +136,68 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     let isDecoding = false;
     let pendingFrame: Uint8Array | null = null;
 
+    // Setup H.264 WASM Worker
+    if (h264WorkerRef.current) {
+      h264WorkerRef.current.terminate();
+      h264WorkerRef.current = null;
+    }
+    h264ReadyRef.current = false;
+    h264QueueRef.current = [];
+
+    const worker = new Worker(new URL('../workers/h264.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+    h264WorkerRef.current = worker;
+
+    const sendNalToWorker = (nal: Uint8Array) => {
+      const copy = new Uint8Array(nal);
+      worker.postMessage(
+        { type: 'decode', renderStateId: 1, data: copy.buffer, offset: 0, length: copy.byteLength },
+        [copy.buffer]
+      );
+    };
+
+    worker.onmessage = (ev) => {
+      const msg = ev.data;
+      if (msg.type === 'decoderReady') {
+        h264ReadyRef.current = true;
+        const queued = h264QueueRef.current;
+        h264QueueRef.current = [];
+        for (const nal of queued) {
+          sendNalToWorker(nal);
+        }
+      } else if (msg.type === 'pictureReady') {
+        const w = msg.width as number;
+        const h = msg.height as number;
+        const yuv = new Uint8Array(msg.data as ArrayBuffer);
+        const canvas = canvasRef.current;
+        if (canvas) {
+          if (canvas.width !== w || canvas.height !== h) {
+            setCanvasSize({ width: w, height: h });
+            setOrientation(w > h ? 'landscape' : 'portrait');
+          }
+          if (!yuvRendererRef.current || yuvRendererCanvasRef.current !== canvas) {
+            yuvRendererRef.current = new YuvWebGLRenderer(canvas);
+            yuvRendererCanvasRef.current = canvas;
+          }
+          yuvRendererRef.current.render(yuv, w, h);
+        }
+
+        const now = performance.now();
+        const delta = Math.round(now - lastFrameArrival);
+        lastFrameArrival = now;
+        if (delta > 0 && delta < 500) setLatency(delta);
+
+        frameCount++;
+        if (now - lastFpsTick >= 1000) {
+          setFps(frameCount);
+          frameCount = 0;
+          lastFpsTick = now;
+        }
+        setStatusText('Live (H.264)');
+      }
+    };
+
     const decodeAndDraw = async (frameBytes: Uint8Array) => {
       isDecoding = true;
       try {
@@ -177,11 +247,26 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       const buf = new Uint8Array(event.data as ArrayBuffer);
       if (buf.length < 2) return;
 
+      // 0x02 = PCM16 Audio chunk
       if (buf[0] === 0x02) {
         playPcmAudio(buf.subarray(1));
         return;
       }
 
+      // 0x03 = H.264 NAL Unit(s)
+      if (buf[0] === 0x03) {
+        const nal = buf.subarray(1);
+        if (h264ReadyRef.current) {
+          sendNalToWorker(nal);
+        } else {
+          if (h264QueueRef.current.length < 30) {
+            h264QueueRef.current.push(new Uint8Array(nal));
+          }
+        }
+        return;
+      }
+
+      // 0x01 = JPEG fallback
       if (buf[0] !== 0x01) return;
 
       const now = performance.now();
@@ -221,6 +306,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       connectWebSocket();
       return () => {
         wsRef.current?.close();
+        h264WorkerRef.current?.terminate();
+        h264WorkerRef.current = null;
         audioCtxRef.current?.close();
         audioCtxRef.current = null;
       };

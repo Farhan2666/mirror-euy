@@ -12,24 +12,26 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
-import android.media.ImageReader
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Display
+import android.view.Surface
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -37,7 +39,6 @@ import androidx.core.content.ContextCompat
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
-import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -68,10 +69,15 @@ class ScreenCaptureService : Service() {
 
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
-    private var imageReader: ImageReader? = null
     private var wsServer: StreamWebSocketServer? = null
     private var captureThread: HandlerThread? = null
     private var captureHandler: Handler? = null
+
+    private var mediaCodec: MediaCodec? = null
+    private var encoderSurface: Surface? = null
+    private var encoderThread: Thread? = null
+    private val encoderActive = AtomicBoolean(false)
+    @Volatile private var spsPpsBytes: ByteArray? = null
 
     private var audioRecord: AudioRecord? = null
     private var audioThread: Thread? = null
@@ -90,15 +96,12 @@ class ScreenCaptureService : Service() {
     private var baseShortEdge = 540
     private var streamWidth = 540
     private var streamHeight = 960
-    private var targetFps = 30
+    private var targetFps = 60
     private var jpegQuality = 55
     private var densityDpi = DisplayMetrics.DENSITY_HIGH
-    private var lastFrameTime = 0L
     private var fpsCounter = 0
     private var fpsTickTime = 0L
-    private val isProcessingFrame = AtomicBoolean(false)
     private val isResizing = AtomicBoolean(false)
-    private val jpegOut = ByteArrayOutputStream(65536)
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -121,7 +124,7 @@ class ScreenCaptureService : Service() {
                 }
 
                 baseShortEdge = intent.getIntExtra(EXTRA_WIDTH, 540)
-                targetFps = intent.getIntExtra(EXTRA_FPS, 30)
+                targetFps = intent.getIntExtra(EXTRA_FPS, 60)
                 jpegQuality = intent.getIntExtra(EXTRA_QUALITY, 55)
 
                 if (resultCode == Activity.RESULT_OK && data != null) {
@@ -161,91 +164,136 @@ class ScreenCaptureService : Service() {
         val realH = metrics.heightPixels.coerceAtLeast(1)
 
         if (realW > realH) {
-            // Landscape: short edge is height
-            streamHeight = baseShortEdge
-            streamWidth = ((baseShortEdge.toFloat() * realW / realH).toInt() and 0xFFFE).coerceAtLeast(2)
+            streamHeight = (baseShortEdge and 0xFFFE).coerceAtLeast(16)
+            streamWidth = ((baseShortEdge.toFloat() * realW / realH).toInt() and 0xFFFE).coerceAtLeast(16)
         } else {
-            // Portrait: short edge is width
-            streamWidth = baseShortEdge
-            streamHeight = ((baseShortEdge.toFloat() * realH / realW).toInt() and 0xFFFE).coerceAtLeast(2)
+            streamWidth = (baseShortEdge and 0xFFFE).coerceAtLeast(16)
+            streamHeight = ((baseShortEdge.toFloat() * realH / realW).toInt() and 0xFFFE).coerceAtLeast(16)
         }
     }
 
-    private fun setupImageReader(): ImageReader {
-        val minFrameIntervalMs = (1000L / targetFps.coerceAtLeast(1)).coerceAtLeast(14L)
-        val w = streamWidth
-        val h = streamHeight
-        val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
-        reader.setOnImageAvailableListener({ r ->
-            if (isResizing.get()) {
-                r.acquireLatestImage()?.close()
-                return@setOnImageAvailableListener
+    private fun createH264Encoder(width: Int, height: Int): Pair<MediaCodec, Surface> {
+        val bitrate = if (baseShortEdge >= 800) 4_500_000 else 2_800_000
+        val fps = targetFps.coerceIn(15, 60)
+
+        fun buildFormat(withBaseline: Boolean): MediaFormat {
+            return MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, fps)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    setInteger(MediaFormat.KEY_PRIORITY, 0) // Realtime priority
+                }
+                if (withBaseline) {
+                    // TinyH264 requires Baseline / Constrained Baseline (no B-frames)
+                    setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                    setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
+                }
             }
-            val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
-            try {
-                val now = System.currentTimeMillis()
-                if (now - lastFrameTime < minFrameIntervalMs || connectedClients <= 0) {
-                    return@setOnImageAvailableListener
-                }
+        }
 
-                val conns = wsServer?.connections
-                if (conns.isNullOrEmpty() || conns.all { it.hasBufferedData() }) {
-                    return@setOnImageAvailableListener
-                }
-                if (!isProcessingFrame.compareAndSet(false, true)) {
-                    return@setOnImageAvailableListener
-                }
+        val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        try {
+            codec.configure(buildFormat(true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        } catch (e: Exception) {
+            Log.w("MirrorEuy", "Baseline profile configure failed, retrying default: ${e.message}")
+            codec.reset()
+            codec.configure(buildFormat(false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
 
-                lastFrameTime = now
+        val surface = codec.createInputSurface()
+        codec.start()
+        return codec to surface
+    }
 
-                val planes = image.planes
-                val buffer = planes[0].buffer
-                val pixelStride = planes[0].pixelStride
-                val rowStride = planes[0].rowStride
-                val rowPadding = rowStride - pixelStride * w
+    private fun startEncoderDrain(codec: MediaCodec) {
+        encoderActive.set(true)
+        fpsTickTime = System.currentTimeMillis()
+        fpsCounter = 0
 
-                val bitmap = Bitmap.createBitmap(
-                    w + rowPadding / pixelStride,
-                    h,
-                    Bitmap.Config.ARGB_8888
-                )
-                bitmap.copyPixelsFromBuffer(buffer)
+        encoderThread = Thread {
+            val bufferInfo = MediaCodec.BufferInfo()
+            while (isRunning && encoderActive.get()) {
+                try {
+                    val outIdx = codec.dequeueOutputBuffer(bufferInfo, 10_000)
+                    if (outIdx >= 0) {
+                        val outBuf = codec.getOutputBuffer(outIdx)
+                        if (outBuf != null && bufferInfo.size > 0) {
+                            outBuf.position(bufferInfo.offset)
+                            outBuf.limit(bufferInfo.offset + bufferInfo.size)
+                            val nalBytes = ByteArray(bufferInfo.size)
+                            outBuf.get(nalBytes)
 
-                val cropped = if (rowPadding > 0) {
-                    Bitmap.createBitmap(bitmap, 0, 0, w, h).also { bitmap.recycle() }
-                } else {
-                    bitmap
-                }
+                            val isConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+                            if (isConfig) {
+                                spsPpsBytes = nalBytes
+                            }
 
-                jpegOut.reset()
-                cropped.compress(Bitmap.CompressFormat.JPEG, jpegQuality, jpegOut)
-                cropped.recycle()
+                            if (connectedClients > 0) {
+                                val packet = ByteBuffer.allocate(1 + nalBytes.size)
+                                packet.put(0x03.toByte())
+                                packet.put(nalBytes)
+                                packet.flip()
 
-                val jpegBytes = jpegOut.toByteArray()
-                val packet = ByteBuffer.allocate(1 + jpegBytes.size)
-                packet.put(0x01.toByte())
-                packet.put(jpegBytes)
-                packet.flip()
+                                val conns = wsServer?.connections
+                                if (conns != null) {
+                                    for (conn in conns) {
+                                        if (conn.isOpen) {
+                                            conn.send(packet.duplicate())
+                                        }
+                                    }
+                                }
+                            }
 
-                for (conn in conns) {
-                    if (conn.isOpen && !conn.hasBufferedData()) {
-                        conn.send(packet.duplicate())
+                            if (!isConfig) {
+                                fpsCounter++
+                                val now = System.currentTimeMillis()
+                                if (now - fpsTickTime >= 1000L) {
+                                    currentFps = fpsCounter
+                                    fpsCounter = 0
+                                    fpsTickTime = now
+                                }
+                            }
+                        }
+                        codec.releaseOutputBuffer(outIdx, false)
                     }
+                } catch (_: IllegalStateException) {
+                    break
+                } catch (e: Exception) {
+                    if (encoderActive.get()) {
+                        Log.e("MirrorEuy", "Encoder drain error: ${e.message}")
+                    }
+                    break
                 }
-
-                fpsCounter++
-                if (now - fpsTickTime >= 1000L) {
-                    currentFps = fpsCounter
-                    fpsCounter = 0
-                    fpsTickTime = now
-                }
-            } catch (_: Exception) {
-            } finally {
-                isProcessingFrame.set(false)
-                image.close()
             }
-        }, captureHandler)
-        return reader
+        }.apply {
+            name = "MirrorEuyH264"
+            start()
+        }
+    }
+
+    private fun stopEncoder() {
+        encoderActive.set(false)
+        try { encoderThread?.join(300) } catch (_: Exception) {}
+        try { mediaCodec?.signalEndOfInputStream() } catch (_: Exception) {}
+        try { mediaCodec?.stop() } catch (_: Exception) {}
+        try { mediaCodec?.release() } catch (_: Exception) {}
+        try { encoderSurface?.release() } catch (_: Exception) {}
+        encoderThread = null
+        mediaCodec = null
+        encoderSurface = null
+        spsPpsBytes = null
+    }
+
+    private fun requestSyncFrame() {
+        try {
+            val params = Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
+            }
+            mediaCodec?.setParameters(params)
+        } catch (_: Exception) {}
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -267,25 +315,25 @@ class ScreenCaptureService : Service() {
                     return@post
                 }
 
-                // 1. Stop old reader from receiving frames
-                val oldReader = imageReader
-                oldReader?.setOnImageAvailableListener(null, null)
+                // 1. Stop old H.264 encoder
+                stopEncoder()
 
-                // 2. Create new reader with new dimensions
-                val newReader = setupImageReader()
-                imageReader = newReader
+                // 2. Create new H.264 encoder for new dimensions
+                val (newCodec, newSurface) = createH264Encoder(streamWidth, streamHeight)
+                mediaCodec = newCodec
+                encoderSurface = newSurface
 
                 // 3. Resize virtual display and attach new surface
                 virtualDisplay?.resize(streamWidth, streamHeight, densityDpi)
-                virtualDisplay?.setSurface(newReader.surface)
+                virtualDisplay?.setSurface(newSurface)
 
-                // 4. Close old reader safely
-                try { oldReader?.close() } catch (_: Exception) {}
+                // 4. Start draining new encoder
+                startEncoderDrain(newCodec)
 
                 // 5. Notify PC about new dimensions
-                Log.d("MirrorEuy", "Resized stream to ${streamWidth}x${streamHeight}")
+                Log.d("MirrorEuy", "Resized H.264 stream to ${streamWidth}x${streamHeight}")
                 wsServer?.broadcast(
-                    """{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}"""
+                    """{"type":"info","codec":"h264","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}"""
                 )
             } catch (e: Exception) {
                 Log.e("MirrorEuy", "Resize error: ${e.message}")
@@ -316,8 +364,9 @@ class ScreenCaptureService : Service() {
             mediaProjection = projectionManager.getMediaProjection(resultCode, data)
             mediaProjection?.registerCallback(projectionCallback, captureHandler)
 
-            fpsTickTime = System.currentTimeMillis()
-            imageReader = setupImageReader()
+            val (codec, surface) = createH264Encoder(streamWidth, streamHeight)
+            mediaCodec = codec
+            encoderSurface = surface
 
             virtualDisplay = mediaProjection?.createVirtualDisplay(
                 "MirrorEuyDisplay",
@@ -325,10 +374,12 @@ class ScreenCaptureService : Service() {
                 streamHeight,
                 densityDpi,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader?.surface,
+                surface,
                 null,
                 captureHandler
             )
+
+            startEncoderDrain(codec)
 
             displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
             displayManager?.registerDisplayListener(displayListener, captureHandler)
@@ -426,7 +477,7 @@ class ScreenCaptureService : Service() {
         try { audioRecord?.release() } catch (_: Exception) {}
         try { audioThread?.interrupt() } catch (_: Exception) {}
         try { virtualDisplay?.release() } catch (_: Exception) {}
-        try { imageReader?.close() } catch (_: Exception) {}
+        stopEncoder()
         try { mediaProjection?.unregisterCallback(projectionCallback) } catch (_: Exception) {}
         try { mediaProjection?.stop() } catch (_: Exception) {}
         try { wsServer?.stop(300) } catch (_: Exception) {}
@@ -434,7 +485,6 @@ class ScreenCaptureService : Service() {
         audioRecord = null
         audioThread = null
         virtualDisplay = null
-        imageReader = null
         mediaProjection = null
         wsServer = null
         captureThread = null
@@ -456,8 +506,8 @@ class ScreenCaptureService : Service() {
             manager.createNotificationChannel(channel)
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Mirror Euy Aktif")
-            .setContentText("Server mirroring aktif di port $WS_PORT")
+            .setContentTitle("Mirror Euy Aktif (H.264)")
+            .setContentText("Server mirroring 60 FPS aktif di port $WS_PORT")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
             .build()
@@ -466,7 +516,16 @@ class ScreenCaptureService : Service() {
     inner class StreamWebSocketServer(address: InetSocketAddress) : WebSocketServer(address) {
         override fun onOpen(conn: WebSocket?, handshake: ClientHandshake?) {
             connectedClients = connections.size
-            conn?.send("""{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}""")
+            conn?.send("""{"type":"info","codec":"h264","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}""")
+            val sps = spsPpsBytes
+            if (sps != null && conn != null && conn.isOpen) {
+                val pkt = ByteBuffer.allocate(1 + sps.size)
+                pkt.put(0x03.toByte())
+                pkt.put(sps)
+                pkt.flip()
+                conn.send(pkt)
+            }
+            requestSyncFrame()
         }
 
         override fun onClose(conn: WebSocket?, code: Int, reason: String?, remote: Boolean) {
