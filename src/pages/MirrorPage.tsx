@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Circle, Square, RotateCw, PenTool, Volume2, VolumeX,
-  Camera, Power, Wifi, Usb, Clock, RefreshCw, Maximize2, Minimize2
+  Camera, Power, Wifi, Usb, Clock, RefreshCw, Maximize2, Minimize2,
+  MousePointerClick, ArrowLeft, Home, Layers
 } from 'lucide-react';
 import { MirrorSession } from '../App';
 
@@ -26,6 +27,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [isAnnotating, setIsAnnotating] = useState(false);
+  const [isControlEnabled, setIsControlEnabled] = useState(true);
+  const [adbReady, setAdbReady] = useState(false);
+  const [tapRipple, setTapRipple] = useState<{ x: number; y: number } | null>(null);
   const [recSeconds, setRecSeconds] = useState(0);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [canvasSize, setCanvasSize] = useState({ width: 540, height: 1170 });
@@ -33,6 +37,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragStartRef = useRef<{ nx: number; ny: number; x: number; y: number; time: number } | null>(null);
+  const lastWheelRef = useRef<number>(0);
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -237,6 +243,131 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   }, [isFullScreen]);
 
   useEffect(() => {
+    if (session.isDemo) return;
+    const api = (window as any).electronAPI;
+    if (!api?.checkControlAdb) return;
+
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await api.checkControlAdb();
+        if (!cancelled) setAdbReady(!!res?.ready);
+      } catch {}
+    };
+    check();
+    const timer = setInterval(check, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [session.isDemo]);
+
+  useEffect(() => {
+    if (session.isDemo || !isControlEnabled || !adbReady || status !== 'live') return;
+    const api = (window as any).electronAPI;
+    if (!api?.sendPhoneInput) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'F11') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        api.sendPhoneInput({ type: 'key', keyCode: 67 });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        api.sendPhoneInput({ type: 'key', keyCode: 66 });
+      } else if (e.key.length === 1 && /^[\x20-\x7E]$/.test(e.key)) {
+        e.preventDefault();
+        api.sendPhoneInput({ type: 'text', text: e.key });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [session.isDemo, isControlEnabled, adbReady, status]);
+
+  const showRipple = (x: number, y: number) => {
+    setTapRipple({ x, y });
+    setTimeout(() => setTapRipple(null), 220);
+  };
+
+  const getNormalizedCoords = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = Math.max(0, Math.min(1, (e.clientX - rect.left) / Math.max(1, rect.width)));
+    const ny = Math.max(0, Math.min(1, (e.clientY - rect.top) / Math.max(1, rect.height)));
+    return { nx, ny, x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    unlockAudio();
+    if (!isControlEnabled || isAnnotating || session.isDemo || !adbReady || e.button !== 0) return;
+    const pos = getNormalizedCoords(e);
+    dragStartRef.current = { ...pos, time: performance.now() };
+  };
+
+  const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!start || !isControlEnabled || isAnnotating || session.isDemo || !adbReady || e.button !== 0) return;
+
+    const end = getNormalizedCoords(e);
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const dist = Math.hypot(dx, dy);
+    const isLandscape = canvasSize.width > canvasSize.height;
+    const api = (window as any).electronAPI;
+
+    showRipple(end.x, end.y);
+
+    if (dist < 10) {
+      api?.sendPhoneInput?.({
+        type: 'tap',
+        nx: end.nx,
+        ny: end.ny,
+        isLandscape,
+      });
+    } else {
+      const durationMs = Math.min(1000, Math.max(120, Math.round(performance.now() - start.time)));
+      api?.sendPhoneInput?.({
+        type: 'swipe',
+        nx1: start.nx,
+        ny1: start.ny,
+        nx2: end.nx,
+        ny2: end.ny,
+        durationMs,
+        isLandscape,
+      });
+    }
+  };
+
+  const handleCanvasWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (!isControlEnabled || isAnnotating || session.isDemo || !adbReady) return;
+    const now = performance.now();
+    if (now - lastWheelRef.current < 220) return;
+    lastWheelRef.current = now;
+
+    const isLandscape = canvasSize.width > canvasSize.height;
+    const api = (window as any).electronAPI;
+    // Scroll down = swipe up on phone screen
+    const ny1 = e.deltaY > 0 ? 0.65 : 0.35;
+    const ny2 = e.deltaY > 0 ? 0.35 : 0.65;
+    api?.sendPhoneInput?.({
+      type: 'swipe',
+      nx1: 0.5,
+      ny1,
+      nx2: 0.5,
+      ny2,
+      durationMs: 180,
+      isLandscape,
+    });
+  };
+
+  const sendNavKey = (keyCode: number) => {
+    if (session.isDemo || !adbReady) return;
+    const api = (window as any).electronAPI;
+    api?.sendPhoneInput?.({ type: 'key', keyCode });
+  };
+
+  useEffect(() => {
     if (!isRecording) { setRecSeconds(0); return; }
     const t = setInterval(() => setRecSeconds(s => s + 1), 1000);
     return () => clearInterval(t);
@@ -400,14 +531,24 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               ref={canvasRef}
               width={canvasSize.width}
               height={canvasSize.height}
-              onClick={unlockAudio}
+              onMouseDown={handleCanvasMouseDown}
+              onMouseUp={handleCanvasMouseUp}
+              onWheel={handleCanvasWheel}
               style={{
                 width: '100%',
                 height: '100%',
                 display: 'block',
-                cursor: 'default',
+                cursor: isControlEnabled && adbReady && !isAnnotating ? 'pointer' : 'default',
               }}
             />
+
+            {/* Tap ripple feedback */}
+            {tapRipple && (
+              <div
+                className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-blue-400/50 border-2 border-white pointer-events-none animate-ping"
+                style={{ left: tapRipple.x, top: tapRipple.y }}
+              />
+            )}
 
             {/* Toast unlock audio - muncul sekali saat live & belum diklik */}
             {status === 'live' && !audioUnlocked && !isMuted && (
@@ -512,6 +653,50 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               {isMuted ? 'Suara Mati' : 'Suara Nyala'}
             </button>
+
+            <button
+              onClick={() => setIsControlEnabled(c => !c)}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                isControlEnabled && adbReady
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+              title={adbReady ? 'Klik, geser, scroll, & ketik di layar HP dari PC' : 'Colok kabel USB + USB Debugging untuk kontrol'}
+            >
+              <MousePointerClick className="w-4 h-4" />
+              {isControlEnabled ? (adbReady ? 'Kontrol PC: Aktif' : 'Kontrol: USB Off') : 'Kontrol PC: Mati'}
+            </button>
+
+            {/* Navigasi Android (Back / Home / Recent) */}
+            <div className="pt-1">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Navigasi HP</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => sendNavKey(4)}
+                  disabled={!adbReady || session.isDemo}
+                  title="Kembali (Back)"
+                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => sendNavKey(3)}
+                  disabled={!adbReady || session.isDemo}
+                  title="Beranda (Home)"
+                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                >
+                  <Home className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => sendNavKey(187)}
+                  disabled={!adbReady || session.isDemo}
+                  title="Recent Apps"
+                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                >
+                  <Layers className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
             <div className="mt-auto border-t border-slate-100 pt-3">
               <button

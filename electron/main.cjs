@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const net = require('net');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 
 let mainWindow = null;
 let powerSaveId = null;
@@ -102,12 +102,48 @@ ipcMain.handle('system:prevent-sleep', (event, enable) => {
   return powerSaveId !== null && powerSaveBlocker.isStarted(powerSaveId);
 });
 
-function getAdbCommand() {
+function getAdbBinary() {
   const localPlatformTools = path.join(process.env.USERPROFILE || '', 'platform-tools', 'adb.exe');
   if (fs.existsSync(localPlatformTools)) {
-    return `"${localPlatformTools}"`;
+    return localPlatformTools;
   }
   return 'adb';
+}
+
+function getAdbCommand() {
+  const bin = getAdbBinary();
+  return bin === 'adb' ? 'adb' : `"${bin}"`;
+}
+
+let cachedScreenSize = null; // { shortEdge, longEdge }
+
+function runAdbShell(args, serial) {
+  const adbBin = getAdbBinary();
+  const fullArgs = serial ? ['-s', serial, 'shell', ...args] : ['shell', ...args];
+  return new Promise((resolve) => {
+    execFile(adbBin, fullArgs, { timeout: 3000 }, (error, stdout, stderr) => {
+      if (error) {
+        resolve({ success: false, error: stderr || error.message, stdout: '' });
+      } else {
+        resolve({ success: true, stdout: stdout || '' });
+      }
+    });
+  });
+}
+
+async function getPhoneScreenSize(serial) {
+  if (cachedScreenSize) return cachedScreenSize;
+  const res = await runAdbShell(['wm', 'size'], serial);
+  if (res.success && res.stdout) {
+    const match = res.stdout.match(/Override size:\s*(\d+)x(\d+)/i) || res.stdout.match(/Physical size:\s*(\d+)x(\d+)/i);
+    if (match) {
+      const w = parseInt(match[1], 10);
+      const h = parseInt(match[2], 10);
+      cachedScreenSize = { shortEdge: Math.min(w, h), longEdge: Math.max(w, h) };
+      return cachedScreenSize;
+    }
+  }
+  return { shortEdge: 1080, longEdge: 2400 };
 }
 
 // Detect USB / ADB connected devices
@@ -222,6 +258,66 @@ ipcMain.handle('device:detect-wifi', async () => {
   }
 
   return { localIps, devices: foundDevices };
+});
+
+// Check if ADB control is available & fetch physical screen size
+ipcMain.handle('control:status', async (event, serial) => {
+  const adbBin = getAdbBinary();
+  const hasDevice = await new Promise((resolve) => {
+    execFile(adbBin, ['devices'], { timeout: 3000 }, (err, stdout) => {
+      if (err || !stdout) return resolve(false);
+      const lines = stdout.split('\n').filter(l => l.trim() && !l.includes('List of devices'));
+      resolve(lines.some(l => /\s+device\b/.test(l)));
+    });
+  });
+  if (!hasDevice) {
+    cachedScreenSize = null;
+    return { ready: false };
+  }
+  const size = await getPhoneScreenSize(serial);
+  return { ready: true, size };
+});
+
+// Send touch / swipe / key / text input to Android via ADB
+ipcMain.handle('control:input', async (event, payload) => {
+  const { type, serial, isLandscape } = payload || {};
+  if (!type) return { success: false };
+
+  if (type === 'key') {
+    const code = parseInt(payload.keyCode, 10);
+    if (Number.isNaN(code)) return { success: false };
+    return runAdbShell(['input', 'keyevent', String(code)], serial);
+  }
+
+  if (type === 'text') {
+    const raw = String(payload.text || '');
+    if (!raw) return { success: false };
+    // Escape space for adb shell input text
+    const safe = raw.replace(/ /g, '%s').replace(/(["'\\`$!&|;<>()?*~])/g, '\\$1');
+    return runAdbShell(['input', 'text', safe], serial);
+  }
+
+  const size = await getPhoneScreenSize(serial);
+  const targetW = isLandscape ? size.longEdge : size.shortEdge;
+  const targetH = isLandscape ? size.shortEdge : size.longEdge;
+  const clamp = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+
+  if (type === 'tap') {
+    const x = Math.round(clamp(payload.nx) * targetW);
+    const y = Math.round(clamp(payload.ny) * targetH);
+    return runAdbShell(['input', 'tap', String(x), String(y)], serial);
+  }
+
+  if (type === 'swipe') {
+    const x1 = Math.round(clamp(payload.nx1) * targetW);
+    const y1 = Math.round(clamp(payload.ny1) * targetH);
+    const x2 = Math.round(clamp(payload.nx2) * targetW);
+    const y2 = Math.round(clamp(payload.ny2) * targetH);
+    const dur = Math.max(60, Math.min(1500, Math.round(Number(payload.durationMs) || 200)));
+    return runAdbShell(['input', 'swipe', String(x1), String(y1), String(x2), String(y2), String(dur)], serial);
+  }
+
+  return { success: false };
 });
 
 // Save recording dialog
