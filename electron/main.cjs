@@ -92,10 +92,19 @@ ipcMain.handle('system:prevent-sleep', (event, enable) => {
   return powerSaveId !== null && powerSaveBlocker.isStarted(powerSaveId);
 });
 
+function getAdbCommand() {
+  const localPlatformTools = path.join(process.env.USERPROFILE || '', 'platform-tools', 'adb.exe');
+  if (fs.existsSync(localPlatformTools)) {
+    return `"${localPlatformTools}"`;
+  }
+  return 'adb';
+}
+
 // Detect USB / ADB connected devices
 ipcMain.handle('device:detect-usb', async () => {
+  const adb = getAdbCommand();
   return new Promise((resolve) => {
-    exec('adb devices -l', (error, stdout) => {
+    exec(`${adb} devices -l`, (error, stdout) => {
       if (error || !stdout) {
         resolve({ hasAdb: false, devices: [] });
         return;
@@ -123,8 +132,9 @@ ipcMain.handle('device:detect-usb', async () => {
 
 // Forward TCP port 8888 over USB ADB so PC can connect to ws://127.0.0.1:8888
 ipcMain.handle('device:adb-forward', async (event, serial) => {
+  const adb = getAdbCommand();
   return new Promise((resolve) => {
-    const cmd = serial ? `adb -s "${serial}" forward tcp:8888 tcp:8888` : 'adb forward tcp:8888 tcp:8888';
+    const cmd = serial ? `${adb} -s "${serial}" forward tcp:8888 tcp:8888` : `${adb} forward tcp:8888 tcp:8888`;
     exec(cmd, (error, stdout, stderr) => {
       if (error) {
         resolve({ success: false, error: stderr || error.message });
