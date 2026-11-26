@@ -48,9 +48,9 @@ class MainActivity : AppCompatActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val width = when (chipGroupRes.checkedChipId) {
-                R.id.chip480p -> 420
-                R.id.chip1080p -> 900
-                else -> 540
+                R.id.chip480p -> 480
+                R.id.chip1080p -> 1080
+                else -> 720
             }
             val fps = if (chipGroupFps.checkedChipId == R.id.chip60fps) 60 else 30
             val quality = if (chipGroupMode.checkedChipId == R.id.chipModeGame) 45 else 60

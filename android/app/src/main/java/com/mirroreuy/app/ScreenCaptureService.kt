@@ -173,7 +173,11 @@ class ScreenCaptureService : Service() {
     }
 
     private fun createH264Encoder(width: Int, height: Int): Pair<MediaCodec, Surface> {
-        val bitrate = if (baseShortEdge >= 800) 4_500_000 else 2_800_000
+        val bitrate = when {
+            baseShortEdge >= 1000 -> 12_000_000
+            baseShortEdge >= 700 -> 8_000_000
+            else -> 5_000_000
+        }
         val fps = targetFps.coerceIn(15, 60)
 
         fun buildFormat(withBaseline: Boolean): MediaFormat {
@@ -181,15 +185,17 @@ class ScreenCaptureService : Service() {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                 setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     setInteger(MediaFormat.KEY_PRIORITY, 0) // Realtime priority
                 }
                 if (withBaseline) {
                     // TinyH264 requires Baseline / Constrained Baseline (no B-frames)
                     setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
-                    setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
                 }
             }
         }
