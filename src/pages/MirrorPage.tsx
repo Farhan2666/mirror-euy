@@ -179,8 +179,12 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
           if (!yuvRendererRef.current || yuvRendererCanvasRef.current !== canvas) {
             yuvRendererRef.current = new YuvWebGLRenderer(canvas);
             yuvRendererCanvasRef.current = canvas;
+            canvas.addEventListener('webglcontextlost', (e) => {
+              e.preventDefault();
+              yuvRendererRef.current = null;
+            });
           }
-          yuvRendererRef.current.render(yuv, w, h);
+          yuvRendererRef.current?.render(yuv, w, h);
         }
 
         const now = performance.now();
