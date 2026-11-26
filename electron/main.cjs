@@ -377,12 +377,15 @@ ipcMain.handle('control:input', async (event, payload) => {
 // Save recording dialog
 ipcMain.handle('recording:save', async (event, { defaultName, buffer }) => {
   if (!mainWindow) return null;
+  const ext = defaultName?.split('.').pop()?.toLowerCase() || 'webm';
+  const filters = ext === 'mp4'
+    ? [{ name: 'Video MP4', extensions: ['mp4'] }, { name: 'Video WebM', extensions: ['webm'] }]
+    : [{ name: 'Video WebM', extensions: ['webm'] }, { name: 'Video MP4', extensions: ['mp4'] }];
+
   const result = await dialog.showSaveDialog(mainWindow, {
     title: 'Simpan Rekaman Mirror Euy',
-    defaultPath: defaultName || `MirrorEuy_${Date.now()}.webm`,
-    filters: [
-      { name: 'Video Files', extensions: ['webm', 'mp4', 'mkv'] }
-    ]
+    defaultPath: defaultName || `MirrorEuy_${Date.now()}.${ext}`,
+    filters,
   });
 
   if (!result.canceled && result.filePath) {

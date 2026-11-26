@@ -552,22 +552,31 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     const audioTrack = audioRecordDestRef.current?.stream.getAudioTracks()[0];
     if (audioTrack) videoStream.addTrack(audioTrack);
 
-    // Pilih codec yang didukung browser
-    const mimeType = (['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'])
-      .find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+    // Pilih format terbaik yang didukung Electron: MP4 lebih kompatibel di Windows
+    const formatCandidates = [
+      { mimeType: 'video/mp4;codecs=avc1,mp4a.40.2', ext: 'mp4' },
+      { mimeType: 'video/mp4;codecs=avc1', ext: 'mp4' },
+      { mimeType: 'video/mp4', ext: 'mp4' },
+      { mimeType: 'video/webm;codecs=vp9,opus', ext: 'webm' },
+      { mimeType: 'video/webm;codecs=vp8,opus', ext: 'webm' },
+      { mimeType: 'video/webm', ext: 'webm' },
+    ];
+    const chosenFormat = formatCandidates.find(f => MediaRecorder.isTypeSupported(f.mimeType))
+      ?? { mimeType: 'video/webm', ext: 'webm' };
 
-    const recorder = new MediaRecorder(videoStream, { mimeType });
+    const recorder = new MediaRecorder(videoStream, { mimeType: chosenFormat.mimeType });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorder.onstop = async () => {
-      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+      const blob = new Blob(chunksRef.current, { type: chosenFormat.mimeType });
       const arrayBuf = await blob.arrayBuffer();
       const api = (window as any).electronAPI;
       if (api?.saveRecording) {
         await api.saveRecording({
-          defaultName: `MirrorEuy_${Date.now()}.webm`,
+          defaultName: `MirrorEuy_${Date.now()}.${chosenFormat.ext}`,
           buffer: new Uint8Array(arrayBuf),
+          ext: chosenFormat.ext,
         });
       }
     };
