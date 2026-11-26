@@ -56,6 +56,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   // Web Audio API PCM16 player refs
   const audioCtxRef = useRef<AudioContext | null>(null);
   const nextAudioTimeRef = useRef<number>(0);
+  const audioRecordDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
   // H.264 TinyH264 Worker + WebGL YUV renderer refs
   const h264WorkerRef = useRef<Worker | null>(null);
@@ -71,6 +72,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       if (!audioCtxRef.current) {
         audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: SAMPLE_RATE });
         nextAudioTimeRef.current = audioCtxRef.current.currentTime;
+        // Buat MediaStreamDestination untuk rekaman (audio dialirkan ke sini DAN ke speaker)
+        audioRecordDestRef.current = audioCtxRef.current.createMediaStreamDestination();
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === 'suspended') {
@@ -94,6 +97,10 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
+      // Juga kirim ke stream rekaman jika ada
+      if (audioRecordDestRef.current) {
+        source.connect(audioRecordDestRef.current);
+      }
 
       const now = ctx.currentTime;
       if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.25) {
@@ -110,6 +117,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
       nextAudioTimeRef.current = audioCtxRef.current.currentTime;
+      audioRecordDestRef.current = audioCtxRef.current.createMediaStreamDestination();
     }
     if (audioCtxRef.current.state === 'suspended') {
       audioCtxRef.current.resume().catch(() => {});
@@ -538,8 +546,17 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     chunksRef.current = [];
-    const stream = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+    // Gabungkan video dari canvas + audio dari Web Audio API
+    const videoStream = canvas.captureStream(60);
+    const audioTrack = audioRecordDestRef.current?.stream.getAudioTracks()[0];
+    if (audioTrack) videoStream.addTrack(audioTrack);
+
+    // Pilih codec yang didukung browser
+    const mimeType = (['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'])
+      .find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+
+    const recorder = new MediaRecorder(videoStream, { mimeType });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
