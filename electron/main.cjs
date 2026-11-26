@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, powerSaveBlocker, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const net = require('net');
 const { exec } = require('child_process');
 
 let mainWindow = null;
@@ -143,6 +145,75 @@ ipcMain.handle('device:adb-forward', async (event, serial) => {
       }
     });
   });
+});
+
+function probePort(ip, port, timeoutMs = 350) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const done = (ok) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => done(true));
+    socket.on('timeout', () => done(false));
+    socket.on('error', () => done(false));
+    socket.connect(port, ip);
+  });
+}
+
+// Scan local WiFi/LAN subnets for Mirror Euy Android servers listening on port 8888
+ipcMain.handle('device:detect-wifi', async () => {
+  const interfaces = os.networkInterfaces();
+  const localIps = [];
+  const subnets = new Set();
+
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    if (!addrs) continue;
+    const lower = name.toLowerCase();
+    // Skip obvious virtual/VPN adapters when scanning
+    if (lower.includes('vethernet') || lower.includes('wsl') || lower.includes('virtualbox') || lower.includes('vmware')) {
+      continue;
+    }
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        localIps.push(addr.address);
+        const parts = addr.address.split('.');
+        if (parts.length === 4) {
+          subnets.add(`${parts[0]}.${parts[1]}.${parts[2]}`);
+        }
+      }
+    }
+  }
+
+  const foundDevices = [];
+  for (const subnet of subnets) {
+    const probes = [];
+    for (let i = 1; i <= 254; i++) {
+      const targetIp = `${subnet}.${i}`;
+      if (localIps.includes(targetIp)) continue;
+      probes.push(
+        probePort(targetIp, 8888, 350).then((open) => {
+          if (open) {
+            foundDevices.push({
+              id: `wifi_${targetIp}`,
+              name: `Android (${targetIp})`,
+              ip: targetIp,
+              port: 8888,
+              type: 'WiFi',
+              status: 'ready',
+            });
+          }
+        })
+      );
+    }
+    await Promise.all(probes);
+  }
+
+  return { localIps, devices: foundDevices };
 });
 
 // Save recording dialog

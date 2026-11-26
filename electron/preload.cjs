@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Device & Mirroring
   detectUsbDevices: () => ipcRenderer.invoke('device:detect-usb'),
+  detectWifiDevices: () => ipcRenderer.invoke('device:detect-wifi'),
   adbForward: (serial) => ipcRenderer.invoke('device:adb-forward', serial),
   saveRecording: (payload) => ipcRenderer.invoke('recording:save', payload),
 });
