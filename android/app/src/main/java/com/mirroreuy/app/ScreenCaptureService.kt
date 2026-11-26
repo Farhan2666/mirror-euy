@@ -84,6 +84,7 @@ class ScreenCaptureService : Service() {
     private var fpsCounter = 0
     private var fpsTickTime = 0L
     private val isProcessingFrame = AtomicBoolean(false)
+    private val isResizing = AtomicBoolean(false)
     private val jpegOut = ByteArrayOutputStream(65536)
 
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -136,10 +137,10 @@ class ScreenCaptureService : Service() {
         return START_NOT_STICKY
     }
 
+    @Suppress("DEPRECATION")
     private fun computeStreamDimensions() {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
         wm.defaultDisplay.getRealMetrics(metrics)
         densityDpi = metrics.densityDpi
 
@@ -147,11 +148,11 @@ class ScreenCaptureService : Service() {
         val realH = metrics.heightPixels.coerceAtLeast(1)
 
         if (realW > realH) {
-            // Landscape: height is the short edge
+            // Landscape: short edge is height
             streamHeight = baseShortEdge
             streamWidth = ((baseShortEdge.toFloat() * realW / realH).toInt() and 0xFFFE).coerceAtLeast(2)
         } else {
-            // Portrait: width is the short edge
+            // Portrait: short edge is width
             streamWidth = baseShortEdge
             streamHeight = ((baseShortEdge.toFloat() * realH / realW).toInt() and 0xFFFE).coerceAtLeast(2)
         }
@@ -163,6 +164,10 @@ class ScreenCaptureService : Service() {
         val h = streamHeight
         val reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 2)
         reader.setOnImageAvailableListener({ r ->
+            if (isResizing.get()) {
+                r.acquireLatestImage()?.close()
+                return@setOnImageAvailableListener
+            }
             val image = r.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
                 val now = System.currentTimeMillis()
@@ -233,25 +238,44 @@ class ScreenCaptureService : Service() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         if (!isRunning || mediaProjection == null || virtualDisplay == null) return
+        doResize()
+    }
 
-        val oldW = streamWidth
-        val oldH = streamHeight
-        computeStreamDimensions()
+    private fun doResize() {
+        if (isResizing.getAndSet(true)) return
+        captureHandler?.post {
+            try {
+                val oldW = streamWidth
+                val oldH = streamHeight
+                computeStreamDimensions()
 
-        if (streamWidth != oldW || streamHeight != oldH) {
-            captureHandler?.post {
-                try {
-                    val oldReader = imageReader
-                    val newReader = setupImageReader()
-                    imageReader = newReader
-                    virtualDisplay?.resize(streamWidth, streamHeight, densityDpi)
-                    virtualDisplay?.setSurface(newReader.surface)
-                    oldReader?.close()
+                if (streamWidth == oldW && streamHeight == oldH) {
+                    isResizing.set(false)
+                    return@post
+                }
 
-                    wsServer?.broadcast(
-                        """{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${Build.MODEL}"}"""
-                    )
-                } catch (_: Exception) {}
+                // 1. Stop old reader from receiving frames
+                val oldReader = imageReader
+                oldReader?.setOnImageAvailableListener(null, null)
+
+                // 2. Create new reader with new dimensions
+                val newReader = setupImageReader()
+                imageReader = newReader
+
+                // 3. Resize virtual display and attach new surface
+                virtualDisplay?.resize(streamWidth, streamHeight, densityDpi)
+                virtualDisplay?.setSurface(newReader.surface)
+
+                // 4. Close old reader safely
+                try { oldReader?.close() } catch (_: Exception) {}
+
+                // 5. Notify PC about new dimensions
+                wsServer?.broadcast(
+                    """{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}"""
+                )
+            } catch (_: Exception) {
+            } finally {
+                isResizing.set(false)
             }
         }
     }
@@ -418,7 +442,7 @@ class ScreenCaptureService : Service() {
     inner class StreamWebSocketServer(address: InetSocketAddress) : WebSocketServer(address) {
         override fun onOpen(conn: WebSocket?, handshake: ClientHandshake?) {
             connectedClients = connections.size
-            conn?.send("""{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${Build.MODEL}"}""")
+            conn?.send("""{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}""")
         }
 
         override fun onClose(conn: WebSocket?, code: Int, reason: String?, remote: Boolean) {

@@ -336,17 +336,27 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
           )}
 
           <div
-            className={`relative bg-black overflow-hidden flex items-center justify-center ${
+            className={`relative bg-black flex items-center justify-center ${
               isFullScreen
                 ? 'w-full h-full'
-                : 'w-full h-full rounded-2xl shadow-xl border-2 border-slate-800'
+                : 'rounded-2xl shadow-xl border-2 border-slate-800 overflow-hidden'
             }`}
+            style={isFullScreen ? {} : {
+              aspectRatio: `${canvasSize.width} / ${canvasSize.height}`,
+              maxWidth: canvasSize.width > canvasSize.height ? '100%' : 'calc(100% - 16px)',
+              maxHeight: '100%',
+            }}
           >
+            {/* Canvas selalu fill seluruh container */}
             <canvas
               ref={canvasRef}
               width={canvasSize.width}
               height={canvasSize.height}
-              className="w-full h-full object-contain"
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'block',
+              }}
             />
 
             {status !== 'live' && (

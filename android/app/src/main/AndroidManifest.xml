@@ -29,7 +29,8 @@
             android:name=".ScreenCaptureService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection"
+            android:configChanges="orientation|screenSize|screenLayout|density" />
     </application>
 
 </manifest>
