@@ -87,6 +87,60 @@ ipcMain.handle('window:set-fullscreen', (event, enable) => {
   return false;
 });
 
+let preStreamState = null;
+
+ipcMain.handle('window:set-stream-mode', (event, payload) => {
+  if (!mainWindow) return false;
+  const { enable, aspectW, aspectH } = payload || {};
+
+  if (enable) {
+    if (!preStreamState) {
+      preStreamState = {
+        wasMaximized: mainWindow.isMaximized(),
+        wasFullScreen: mainWindow.isFullScreen(),
+        bounds: mainWindow.getBounds(),
+      };
+    }
+    if (mainWindow.isFullScreen()) mainWindow.setFullScreen(false);
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+
+    mainWindow.setMinimumSize(240, 240);
+
+    const w = Math.max(1, Number(aspectW) || 540);
+    const h = Math.max(1, Number(aspectH) || 1170);
+    const isLandscape = w > h;
+
+    // Fit cleanly inside current display workArea
+    const { screen } = require('electron');
+    const display = screen.getDisplayMatching(mainWindow.getBounds());
+    const maxW = Math.floor(display.workAreaSize.width * 0.85);
+    const maxH = Math.floor(display.workAreaSize.height * 0.88);
+
+    let targetH = isLandscape ? Math.min(540, maxH) : Math.min(820, maxH);
+    let targetW = Math.round(targetH * (w / h));
+    if (targetW > maxW) {
+      targetW = maxW;
+      targetH = Math.round(targetW * (h / w));
+    }
+
+    mainWindow.setAspectRatio(w / h);
+    mainWindow.setSize(Math.max(240, targetW), Math.max(240, targetH));
+    return true;
+  } else {
+    mainWindow.setAspectRatio(0);
+    mainWindow.setMinimumSize(960, 640);
+    if (preStreamState) {
+      if (preStreamState.wasMaximized) {
+        mainWindow.maximize();
+      } else if (preStreamState.bounds) {
+        mainWindow.setBounds(preStreamState.bounds);
+      }
+      preStreamState = null;
+    }
+    return false;
+  }
+});
+
 // Power Save Blocker for live streamers (prevents sleep during stream)
 ipcMain.handle('system:prevent-sleep', (event, enable) => {
   if (enable) {

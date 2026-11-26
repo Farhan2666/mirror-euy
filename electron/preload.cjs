@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window:close'),
   toggleAlwaysOnTop: (enable) => ipcRenderer.invoke('window:toggle-always-on-top', enable),
   setFullScreen: (enable) => ipcRenderer.invoke('window:set-fullscreen', enable),
+  setStreamMode: (payload) => ipcRenderer.invoke('window:set-stream-mode', payload),
   preventSleep: (enable) => ipcRenderer.invoke('system:prevent-sleep', enable),
 
   // Device & Mirroring

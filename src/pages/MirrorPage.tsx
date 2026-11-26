@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Circle, Square, RotateCw, PenTool, Volume2, VolumeX,
   Camera, Power, Wifi, Usb, Clock, RefreshCw, Maximize2, Minimize2,
-  MousePointerClick, ArrowLeft, Home, Layers
+  MousePointerClick, ArrowLeft, Home, Layers, Tv2, X, Move
 } from 'lucide-react';
 import { MirrorSession } from '../App';
 
 interface MirrorPageProps {
   session: MirrorSession;
   isFullScreen: boolean;
+  isStreamMode: boolean;
+  onSetStreamMode: (enable: boolean) => void;
   onToggleFullScreen: () => void;
   onDisconnect: () => void;
 }
@@ -16,6 +18,8 @@ interface MirrorPageProps {
 export const MirrorPage: React.FC<MirrorPageProps> = ({
   session,
   isFullScreen,
+  isStreamMode,
+  onSetStreamMode,
   onToggleFullScreen,
   onDisconnect,
 }) => {
@@ -35,6 +39,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const [canvasSize, setCanvasSize] = useState({ width: 540, height: 1170 });
   const [boxSize, setBoxSize] = useState({ width: 800, height: 600 });
 
+  // ── Stream Mode (OBS / TikTok Studio) ──────────────────────────────────────
+  const [streamHoverControls, setStreamHoverControls] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragStartRef = useRef<{ nx: number; ny: number; x: number; y: number; time: number } | null>(null);
@@ -52,7 +59,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const playPcmAudio = (pcmBytes: Uint8Array) => {
     if (isMutedRef.current) return;
     try {
-      // Standar 48000 Hz Stereo (2 channel interleaved L/R) persis seperti Vysor
       const SAMPLE_RATE = 48000;
       if (!audioCtxRef.current) {
         audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: SAMPLE_RATE });
@@ -64,7 +70,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
         return;
       }
 
-      // Setiap frame audio: 4 byte = 2 byte L (Int16) + 2 byte R (Int16)
       const frameCount = Math.floor(pcmBytes.byteLength / 4);
       if (frameCount <= 0) return;
 
@@ -83,7 +88,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       source.connect(ctx.destination);
 
       const now = ctx.currentTime;
-      // Sinkronisasi buffer agar tidak delay dan tidak stuttering
       if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.25) {
         nextAudioTimeRef.current = now + 0.03;
       }
@@ -92,7 +96,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     } catch {}
   };
 
-  // Unlock AudioContext saat user klik canvas
   const unlockAudio = () => {
     if (audioUnlocked) return;
     setAudioUnlocked(true);
@@ -174,13 +177,11 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       const buf = new Uint8Array(event.data as ArrayBuffer);
       if (buf.length < 2) return;
 
-      // 0x02 = PCM16 Audio chunk
       if (buf[0] === 0x02) {
         playPcmAudio(buf.subarray(1));
         return;
       }
 
-      // 0x01 = JPEG Video frame
       if (buf[0] !== 0x01) return;
 
       const now = performance.now();
@@ -226,11 +227,13 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     }
   }, [session]);
 
+  // ── ResizeObserver untuk compute canvas display size ───────────────────────
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const updateSize = () => {
-      const pad = isFullScreen ? 0 : 24;
+      // Di stream mode: gunakan seluruh area tanpa padding
+      const pad = (isFullScreen || isStreamMode) ? 0 : 24;
       setBoxSize({
         width: Math.max(100, el.clientWidth - pad),
         height: Math.max(100, el.clientHeight - pad),
@@ -240,8 +243,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     const ro = new ResizeObserver(updateSize);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [isFullScreen]);
+  }, [isFullScreen, isStreamMode]);
 
+  // ── ADB control status ─────────────────────────────────────────────────────
   useEffect(() => {
     if (session.isDemo) return;
     const api = (window as any).electronAPI;
@@ -262,13 +266,14 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     };
   }, [session.isDemo]);
 
+  // ── Keyboard input → ADB ──────────────────────────────────────────────────
   useEffect(() => {
     if (session.isDemo || !isControlEnabled || !adbReady || status !== 'live') return;
     const api = (window as any).electronAPI;
     if (!api?.sendPhoneInput) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === 'F11') return;
+      if (e.key === 'Escape' || e.key === 'F10' || e.key === 'F11') return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'Backspace') {
         e.preventDefault();
@@ -283,7 +288,23 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [session.isDemo, isControlEnabled, adbReady, status]);
+  }, [session.isDemo, isControlEnabled, adbReady, status, isStreamMode]);
+
+  // ── Stream mode: resize window ke proporsi HP ──────────────────────────────
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.setStreamMode) return;
+    // Kirim ke main process: { enable, aspectW, aspectH }
+    if (isStreamMode) {
+      api.setStreamMode({
+        enable: true,
+        aspectW: canvasSize.width,
+        aspectH: canvasSize.height,
+      });
+    } else {
+      api.setStreamMode({ enable: false });
+    }
+  }, [isStreamMode, canvasSize]);
 
   const showRipple = (x: number, y: number) => {
     setTapRipple({ x, y });
@@ -347,7 +368,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
     const isLandscape = canvasSize.width > canvasSize.height;
     const api = (window as any).electronAPI;
-    // Scroll down = swipe up on phone screen
     const ny1 = e.deltaY > 0 ? 0.65 : 0.35;
     const ny2 = e.deltaY > 0 ? 0.35 : 0.65;
     api?.sendPhoneInput?.({
@@ -468,6 +488,119 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const displayWidth = Math.max(1, Math.floor(canvasSize.width * scale));
   const displayHeight = Math.max(1, Math.floor(canvasSize.height * scale));
 
+  // ── Stream Mode layout ─────────────────────────────────────────────────────
+  if (isStreamMode) {
+    return (
+      <div
+        className="flex items-center justify-center w-full h-full bg-black relative"
+        onMouseEnter={() => setStreamHoverControls(true)}
+        onMouseLeave={() => setStreamHoverControls(false)}
+      >
+        {/* Container utama: ref untuk measure */}
+        <div
+          ref={containerRef}
+          className="w-full h-full flex items-center justify-center"
+        >
+          <canvas
+            ref={canvasRef}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            onMouseDown={handleCanvasMouseDown}
+            onMouseUp={handleCanvasMouseUp}
+            onWheel={handleCanvasWheel}
+            style={{
+              width: `${displayWidth}px`,
+              height: `${displayHeight}px`,
+              display: 'block',
+              cursor: isControlEnabled && adbReady && !isAnnotating ? 'pointer' : 'default',
+            }}
+          />
+        </div>
+
+        {/* Tap ripple */}
+        {tapRipple && (
+          <div
+            className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-blue-400/50 border-2 border-white pointer-events-none animate-ping"
+            style={{ left: tapRipple.x, top: tapRipple.y }}
+          />
+        )}
+
+        {/* Floating controls — muncul saat hover */}
+        <div
+          className={`absolute top-3 right-3 flex flex-col items-end gap-2 transition-all duration-300 ${
+            streamHoverControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center gap-1.5">
+            {/* Drag handle untuk geser window borderless */}
+            <div
+              title="Geser jendela"
+              className="app-drag flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-sm border border-white/20 text-white/80 text-[11px] font-medium cursor-move select-none"
+            >
+              <Move className="w-3 h-3" />
+              Geser
+            </div>
+
+            {/* Badge mode */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-purple-600/80 backdrop-blur-sm border border-purple-400/40 text-white text-[11px] font-semibold select-none">
+              <Tv2 className="w-3 h-3" />
+              MODE OBS/TT
+            </div>
+          </div>
+
+          {/* Tombol keluar */}
+          <button
+            onClick={() => onSetStreamMode(false)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/70 hover:bg-black/90 text-white/80 hover:text-white text-xs font-medium backdrop-blur-sm border border-white/20 transition-all"
+          >
+            <X className="w-3.5 h-3.5" />
+            Keluar Mode (ESC / F10)
+          </button>
+
+          {/* Nav buttons */}
+          {adbReady && (
+            <div className="flex gap-1.5">
+              <button onClick={() => sendNavKey(4)} title="Back" className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 backdrop-blur-sm transition-all">
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => sendNavKey(3)} title="Home" className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 backdrop-blur-sm transition-all">
+                <Home className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => sendNavKey(187)} title="Recents" className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white/70 hover:text-white border border-white/15 backdrop-blur-sm transition-all">
+                <Layers className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Recording indicator */}
+        {isRecording && (
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-600/80 backdrop-blur-sm border border-red-400/40 text-white text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            REC {fmt(recSeconds)}
+          </div>
+        )}
+
+        {/* Status overlay */}
+        {status !== 'live' && (
+          <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center gap-3">
+            <p className="text-sm text-white font-medium">{statusText}</p>
+            {status === 'error' && (
+              <button
+                onClick={connectWebSocket}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Coba Hubungkan Lagi
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Normal layout ──────────────────────────────────────────────────────────
   return (
     <div className={`flex flex-col h-full ${isFullScreen ? 'bg-black' : 'bg-slate-50'}`}>
       {/* ── Top Info Bar (hidden in fullscreen) ── */}
@@ -515,7 +648,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             </button>
           )}
 
-          {/* Container preview: ukuran selalu presisi mengikuti aspect ratio HP */}
+          {/* Container preview */}
           <div
             className={`relative flex items-center justify-center bg-black overflow-hidden ${
               isFullScreen
@@ -550,7 +683,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               />
             )}
 
-            {/* Toast unlock audio - muncul sekali saat live & belum diklik */}
+            {/* Toast unlock audio */}
             {status === 'live' && !audioUnlocked && !isMuted && (
               <div
                 className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 rounded-full bg-black/70 backdrop-blur-sm border border-white/20 text-white text-xs font-medium cursor-pointer select-none"
@@ -597,6 +730,16 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             >
               <Maximize2 className="w-4 h-4" />
               Layar Penuh
+            </button>
+
+            {/* ── Mode OBS / TikTok Studio ── */}
+            <button
+              onClick={() => onSetStreamMode(true)}
+              title="Jendela bersih tanpa bingkai untuk Window Capture di OBS / TikTok Studio (F10)"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-all"
+            >
+              <Tv2 className="w-4 h-4" />
+              Mode OBS / TT Studio
             </button>
 
             <button
