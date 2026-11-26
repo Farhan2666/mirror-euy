@@ -24,6 +24,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const [latency, setLatency] = useState(session.isDemo ? 42 : 0);
   const [isRecording, setIsRecording] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -43,13 +44,16 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const playPcmAudio = (pcmBytes: Uint8Array) => {
     if (isMutedRef.current) return;
     try {
+      // Buat AudioContext jika belum ada
       if (!audioCtxRef.current) {
         audioCtxRef.current = new AudioContext({ sampleRate: 44100 });
         nextAudioTimeRef.current = audioCtxRef.current.currentTime;
       }
       const ctx = audioCtxRef.current;
+      // Resume jika suspended (autoplay policy)
       if (ctx.state === 'suspended') {
-        ctx.resume();
+        ctx.resume().catch(() => {});
+        return; // skip frame ini, nanti frame berikutnya sudah unlocked
       }
 
       const sampleCount = Math.floor(pcmBytes.byteLength / 2);
@@ -67,13 +71,25 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       source.connect(ctx.destination);
 
       const now = ctx.currentTime;
-      // Prevent drift/lag buildup if audio falls behind
-      if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.25) {
-        nextAudioTimeRef.current = now + 0.02;
+      if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.3) {
+        nextAudioTimeRef.current = now + 0.05;
       }
       source.start(nextAudioTimeRef.current);
       nextAudioTimeRef.current += audioBuffer.duration;
     } catch {}
+  };
+
+  // Unlock AudioContext saat user klik canvas
+  const unlockAudio = () => {
+    if (audioUnlocked) return;
+    setAudioUnlocked(true);
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext({ sampleRate: 44100 });
+      nextAudioTimeRef.current = audioCtxRef.current.currentTime;
+    }
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => {});
+    }
   };
 
   // Real WebSocket stream receiver
@@ -335,29 +351,39 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             </button>
           )}
 
+          {/* Container hitam: fullscreen=full area, normal=kotak rounded */}
           <div
-            className={`relative bg-black flex items-center justify-center ${
+            className={`relative bg-black ${
               isFullScreen
-                ? 'w-full h-full'
-                : 'rounded-2xl shadow-xl border-2 border-slate-800 overflow-hidden'
+                ? 'w-full h-full flex items-center justify-center'
+                : 'w-full h-full rounded-2xl shadow-xl border-2 border-slate-800 overflow-hidden flex items-center justify-center'
             }`}
-            style={isFullScreen ? {} : {
-              aspectRatio: `${canvasSize.width} / ${canvasSize.height}`,
-              maxWidth: canvasSize.width > canvasSize.height ? '100%' : 'calc(100% - 16px)',
-              maxHeight: '100%',
-            }}
           >
-            {/* Canvas selalu fill seluruh container */}
+            {/* object-fit: contain → canvas maintain aspect ratio otomatis */}
             <canvas
               ref={canvasRef}
               width={canvasSize.width}
               height={canvasSize.height}
+              onClick={unlockAudio}
               style={{
                 width: '100%',
                 height: '100%',
+                objectFit: 'contain',
                 display: 'block',
+                cursor: 'default',
               }}
             />
+
+            {/* Toast unlock audio - muncul sekali saat live & belum diklik */}
+            {status === 'live' && !audioUnlocked && !isMuted && (
+              <div
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 rounded-full bg-black/70 backdrop-blur-sm border border-white/20 text-white text-xs font-medium cursor-pointer select-none"
+                onClick={unlockAudio}
+              >
+                <Volume2 className="w-3.5 h-3.5 text-green-400 animate-pulse" />
+                Klik layar untuk aktifkan suara
+              </div>
+            )}
 
             {status !== 'live' && (
               <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center gap-3">
