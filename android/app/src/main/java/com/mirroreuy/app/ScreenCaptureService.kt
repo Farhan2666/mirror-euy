@@ -201,8 +201,36 @@ class ScreenCaptureService : Service() {
         }
 
         val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        val caps = try {
+            codec.codecInfo.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        } catch (_: Exception) { null }
+        val maxBaselineLevel = caps?.profileLevels
+            ?.filter { it.profile == MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline }
+            ?.maxOfOrNull { it.level }
+
+        fun buildFormatWithProfile(profile: Int?, level: Int?): MediaFormat {
+            return buildFormat(false).apply {
+                if (profile != null) {
+                    setInteger(MediaFormat.KEY_PROFILE, profile)
+                    if (level != null) {
+                        setInteger(MediaFormat.KEY_LEVEL, level)
+                    }
+                }
+            }
+        }
+
         try {
-            codec.configure(buildFormat(true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            if (maxBaselineLevel != null) {
+                codec.configure(
+                    buildFormatWithProfile(MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline, maxBaselineLevel),
+                    null, null, MediaCodec.CONFIGURE_FLAG_ENCODE
+                )
+            } else {
+                codec.configure(
+                    buildFormatWithProfile(MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline, MediaCodecInfo.CodecProfileLevel.AVCLevel5),
+                    null, null, MediaCodec.CONFIGURE_FLAG_ENCODE
+                )
+            }
         } catch (e: Exception) {
             Log.w("MirrorEuy", "Baseline profile configure failed, retrying default: ${e.message}")
             codec.reset()
