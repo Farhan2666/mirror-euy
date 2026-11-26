@@ -1,0 +1,13 @@
+# Node / Electron
+node_modules/
+dist/
+dist-electron/
+*.log
+
+# Android / Gradle
+android/.gradle/
+android/local.properties
+android/app/build/
+android/build/
+android/.idea/
+*.iml
