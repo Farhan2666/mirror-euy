@@ -29,7 +29,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const [recSeconds, setRecSeconds] = useState(0);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [canvasSize, setCanvasSize] = useState({ width: 540, height: 1170 });
+  const [boxSize, setBoxSize] = useState({ width: 800, height: 600 });
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -219,6 +221,22 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   }, [session]);
 
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const updateSize = () => {
+      const pad = isFullScreen ? 0 : 24;
+      setBoxSize({
+        width: Math.max(100, el.clientWidth - pad),
+        height: Math.max(100, el.clientHeight - pad),
+      });
+    };
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isFullScreen]);
+
+  useEffect(() => {
     if (!isRecording) { setRecSeconds(0); return; }
     const t = setInterval(() => setRecSeconds(s => s + 1), 1000);
     return () => clearInterval(t);
@@ -312,6 +330,13 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
   const latencyColor = latency < 60 ? 'text-green-600' : latency < 110 ? 'text-yellow-600' : 'text-red-600';
 
+  const scale = Math.min(
+    boxSize.width / Math.max(1, canvasSize.width),
+    boxSize.height / Math.max(1, canvasSize.height)
+  );
+  const displayWidth = Math.max(1, Math.floor(canvasSize.width * scale));
+  const displayHeight = Math.max(1, Math.floor(canvasSize.height * scale));
+
   return (
     <div className={`flex flex-col h-full ${isFullScreen ? 'bg-black' : 'bg-slate-50'}`}>
       {/* ── Top Info Bar (hidden in fullscreen) ── */}
@@ -343,8 +368,11 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       )}
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className={`flex-1 min-w-0 min-h-0 overflow-hidden flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}>
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div
+          ref={containerRef}
+          className={`flex-1 min-w-0 min-h-0 overflow-hidden flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}
+        >
           {/* Floating exit fullscreen button */}
           {isFullScreen && (
             <button
@@ -356,30 +384,26 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             </button>
           )}
 
-          {/* Container preview: di normal ikut ukuran canvas agar tidak ada kotak hitam besar */}
+          {/* Container preview: ukuran selalu presisi mengikuti aspect ratio HP */}
           <div
-            className={`relative flex items-center justify-center ${
+            className={`relative flex items-center justify-center bg-black overflow-hidden ${
               isFullScreen
-                ? 'w-full h-full bg-black'
-                : 'max-w-full max-h-full rounded-2xl shadow-xl border-2 border-slate-800 bg-black overflow-hidden'
+                ? ''
+                : 'rounded-2xl shadow-xl border-2 border-slate-800'
             }`}
+            style={{
+              width: `${displayWidth}px`,
+              height: `${displayHeight}px`,
+            }}
           >
             <canvas
               ref={canvasRef}
               width={canvasSize.width}
               height={canvasSize.height}
               onClick={unlockAudio}
-              style={isFullScreen ? {
+              style={{
                 width: '100%',
                 height: '100%',
-                objectFit: 'contain',
-                display: 'block',
-                cursor: 'default',
-              } : {
-                maxWidth: '100%',
-                maxHeight: '100%',
-                width: 'auto',
-                height: 'auto',
                 display: 'block',
                 cursor: 'default',
               }}
