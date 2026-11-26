@@ -44,26 +44,30 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   const playPcmAudio = (pcmBytes: Uint8Array) => {
     if (isMutedRef.current) return;
     try {
-      // Buat AudioContext jika belum ada
+      // Standar 48000 Hz Stereo (2 channel interleaved L/R) persis seperti Vysor
+      const SAMPLE_RATE = 48000;
       if (!audioCtxRef.current) {
-        audioCtxRef.current = new AudioContext({ sampleRate: 44100 });
+        audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: SAMPLE_RATE });
         nextAudioTimeRef.current = audioCtxRef.current.currentTime;
       }
       const ctx = audioCtxRef.current;
-      // Resume jika suspended (autoplay policy)
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
-        return; // skip frame ini, nanti frame berikutnya sudah unlocked
+        return;
       }
 
-      const sampleCount = Math.floor(pcmBytes.byteLength / 2);
-      if (sampleCount <= 0) return;
+      // Setiap frame audio: 4 byte = 2 byte L (Int16) + 2 byte R (Int16)
+      const frameCount = Math.floor(pcmBytes.byteLength / 4);
+      if (frameCount <= 0) return;
 
       const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
-      const audioBuffer = ctx.createBuffer(1, sampleCount, 44100);
-      const channel = audioBuffer.getChannelData(0);
-      for (let i = 0; i < sampleCount; i++) {
-        channel[i] = view.getInt16(i * 2, true) / 32768;
+      const audioBuffer = ctx.createBuffer(2, frameCount, SAMPLE_RATE);
+      const leftChannel = audioBuffer.getChannelData(0);
+      const rightChannel = audioBuffer.getChannelData(1);
+
+      for (let i = 0; i < frameCount; i++) {
+        leftChannel[i] = view.getInt16(i * 4, true) / 32768;
+        rightChannel[i] = view.getInt16(i * 4 + 2, true) / 32768;
       }
 
       const source = ctx.createBufferSource();
@@ -71,8 +75,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       source.connect(ctx.destination);
 
       const now = ctx.currentTime;
-      if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.3) {
-        nextAudioTimeRef.current = now + 0.05;
+      // Sinkronisasi buffer agar tidak delay dan tidak stuttering
+      if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.25) {
+        nextAudioTimeRef.current = now + 0.03;
       }
       source.start(nextAudioTimeRef.current);
       nextAudioTimeRef.current += audioBuffer.duration;
@@ -84,7 +89,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
     if (audioUnlocked) return;
     setAudioUnlocked(true);
     if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioContext({ sampleRate: 44100 });
+      audioCtxRef.current = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 });
       nextAudioTimeRef.current = audioCtxRef.current.currentTime;
     }
     if (audioCtxRef.current.state === 'suspended') {
@@ -339,7 +344,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
       {/* ── Main Area ── */}
       <div className="flex-1 flex overflow-hidden">
-        <div className={`flex-1 flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}>
+        <div className={`flex-1 min-w-0 min-h-0 overflow-hidden flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}>
           {/* Floating exit fullscreen button */}
           {isFullScreen && (
             <button
@@ -351,24 +356,30 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             </button>
           )}
 
-          {/* Container hitam: fullscreen=full area, normal=kotak rounded */}
+          {/* Container preview: di normal ikut ukuran canvas agar tidak ada kotak hitam besar */}
           <div
-            className={`relative bg-black ${
+            className={`relative flex items-center justify-center ${
               isFullScreen
-                ? 'w-full h-full flex items-center justify-center'
-                : 'w-full h-full rounded-2xl shadow-xl border-2 border-slate-800 overflow-hidden flex items-center justify-center'
+                ? 'w-full h-full bg-black'
+                : 'max-w-full max-h-full rounded-2xl shadow-xl border-2 border-slate-800 bg-black overflow-hidden'
             }`}
           >
-            {/* object-fit: contain → canvas maintain aspect ratio otomatis */}
             <canvas
               ref={canvasRef}
               width={canvasSize.width}
               height={canvasSize.height}
               onClick={unlockAudio}
-              style={{
+              style={isFullScreen ? {
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
+                display: 'block',
+                cursor: 'default',
+              } : {
+                maxWidth: '100%',
+                maxHeight: '100%',
+                width: 'auto',
+                height: 'auto',
                 display: 'block',
                 cursor: 'default',
               }}

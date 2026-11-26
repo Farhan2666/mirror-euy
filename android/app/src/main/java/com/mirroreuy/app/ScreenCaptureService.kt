@@ -28,6 +28,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.util.DisplayMetrics
+import android.util.Log
+import android.view.Display
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -73,6 +75,17 @@ class ScreenCaptureService : Service() {
 
     private var audioRecord: AudioRecord? = null
     private var audioThread: Thread? = null
+    private var displayManager: DisplayManager? = null
+
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+        override fun onDisplayChanged(displayId: Int) {
+            if (displayId == Display.DEFAULT_DISPLAY && isRunning && virtualDisplay != null) {
+                doResize()
+            }
+        }
+    }
 
     private var baseShortEdge = 540
     private var streamWidth = 540
@@ -270,10 +283,12 @@ class ScreenCaptureService : Service() {
                 try { oldReader?.close() } catch (_: Exception) {}
 
                 // 5. Notify PC about new dimensions
+                Log.d("MirrorEuy", "Resized stream to ${streamWidth}x${streamHeight}")
                 wsServer?.broadcast(
                     """{"type":"info","width":$streamWidth,"height":$streamHeight,"device":"${android.os.Build.MODEL}"}"""
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e("MirrorEuy", "Resize error: ${e.message}")
             } finally {
                 isResizing.set(false)
             }
@@ -315,6 +330,9 @@ class ScreenCaptureService : Service() {
                 captureHandler
             )
 
+            displayManager = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+            displayManager?.registerDisplayListener(displayListener, captureHandler)
+
             startAudioCapture()
         } catch (e: Exception) {
             lastError = "Error capture: ${e.message}"
@@ -329,12 +347,13 @@ class ScreenCaptureService : Service() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
+            Log.w("MirrorEuy", "RECORD_AUDIO permission not granted")
             return
         }
         val projection = mediaProjection ?: return
 
         try {
-            val sampleRate = 44100
+            val sampleRate = 48000
             val config = AudioPlaybackCaptureConfiguration.Builder(projection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
@@ -344,12 +363,12 @@ class ScreenCaptureService : Service() {
             val audioFormat = AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                 .setSampleRate(sampleRate)
-                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                 .build()
 
             val minBuf = AudioRecord.getMinBufferSize(
                 sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.CHANNEL_IN_STEREO,
                 AudioFormat.ENCODING_PCM_16BIT
             ).coerceAtLeast(4096)
 
@@ -360,15 +379,17 @@ class ScreenCaptureService : Service() {
                 .build()
 
             if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e("MirrorEuy", "AudioRecord failed to initialize")
                 recorder.release()
                 return
             }
 
             audioRecord = recorder
             recorder.startRecording()
+            Log.d("MirrorEuy", "AudioPlaybackCapture started at ${sampleRate}Hz Stereo")
 
             audioThread = Thread {
-                val pcmBuf = ByteArray(2048)
+                val pcmBuf = ByteArray(4096)
                 while (isRunning && audioRecord != null) {
                     val read = recorder.read(pcmBuf, 0, pcmBuf.size)
                     if (read > 0 && connectedClients > 0) {
@@ -391,13 +412,16 @@ class ScreenCaptureService : Service() {
                 name = "MirrorEuyAudio"
                 start()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e("MirrorEuy", "startAudioCapture error: ${e.message}")
+        }
     }
 
     private fun stopStreaming() {
         isRunning = false
         connectedClients = 0
         currentFps = 0
+        try { displayManager?.unregisterDisplayListener(displayListener) } catch (_: Exception) {}
         try { audioRecord?.stop() } catch (_: Exception) {}
         try { audioRecord?.release() } catch (_: Exception) {}
         try { audioThread?.interrupt() } catch (_: Exception) {}

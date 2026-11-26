@@ -103,6 +103,17 @@ class MainActivity : AppCompatActivity() {
                 startService(stopIntent)
                 refreshStatus()
             } else {
+                // Pastikan izin RECORD_AUDIO sudah dicek dan diminta jika belum ada
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED
+                ) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.RECORD_AUDIO),
+                        101
+                    )
+                }
+
                 val projectionManager =
                     getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 captureLauncher.launch(projectionManager.createScreenCaptureIntent())
