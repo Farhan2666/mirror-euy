@@ -1,16 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Circle, Square, RotateCw, PenTool, Volume2, VolumeX,
-  Camera, Power, Wifi, Usb, Clock, RefreshCw
+  Camera, Power, Wifi, Usb, Clock, RefreshCw, Maximize2, Minimize2
 } from 'lucide-react';
 import { MirrorSession } from '../App';
 
 interface MirrorPageProps {
   session: MirrorSession;
+  isFullScreen: boolean;
+  onToggleFullScreen: () => void;
   onDisconnect: () => void;
 }
 
-export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect }) => {
+export const MirrorPage: React.FC<MirrorPageProps> = ({
+  session,
+  isFullScreen,
+  onToggleFullScreen,
+  onDisconnect,
+}) => {
   const [status, setStatus] = useState<'connecting' | 'live' | 'error'>(session.isDemo ? 'live' : 'connecting');
   const [statusText, setStatusText] = useState(session.isDemo ? 'Simulasi Aktif' : 'Menghubungkan ke HP...');
   const [fps, setFps] = useState(session.isDemo ? 60 : 0);
@@ -20,12 +27,54 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [recSeconds, setRecSeconds] = useState(0);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  const [canvasSize, setCanvasSize] = useState({ width: 360, height: 780 });
+  const [canvasSize, setCanvasSize] = useState({ width: 540, height: 1170 });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+
+  // Web Audio API PCM16 player refs
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const nextAudioTimeRef = useRef<number>(0);
+
+  const playPcmAudio = (pcmBytes: Uint8Array) => {
+    if (isMutedRef.current) return;
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext({ sampleRate: 44100 });
+        nextAudioTimeRef.current = audioCtxRef.current.currentTime;
+      }
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const sampleCount = Math.floor(pcmBytes.byteLength / 2);
+      if (sampleCount <= 0) return;
+
+      const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+      const audioBuffer = ctx.createBuffer(1, sampleCount, 44100);
+      const channel = audioBuffer.getChannelData(0);
+      for (let i = 0; i < sampleCount; i++) {
+        channel[i] = view.getInt16(i * 2, true) / 32768;
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      // Prevent drift/lag buildup if audio falls behind
+      if (nextAudioTimeRef.current < now || nextAudioTimeRef.current - now > 0.25) {
+        nextAudioTimeRef.current = now + 0.02;
+      }
+      source.start(nextAudioTimeRef.current);
+      nextAudioTimeRef.current += audioBuffer.duration;
+    } catch {}
+  };
 
   // Real WebSocket stream receiver
   const connectWebSocket = () => {
@@ -68,7 +117,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
       } catch {
       } finally {
         isDecoding = false;
-        // Always jump straight to the newest arrived frame, dropping stale ones
         if (pendingFrame) {
           const next = pendingFrame;
           pendingFrame = null;
@@ -95,7 +143,16 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
       }
 
       const buf = new Uint8Array(event.data as ArrayBuffer);
-      if (buf.length < 2 || buf[0] !== 0x01) return;
+      if (buf.length < 2) return;
+
+      // 0x02 = PCM16 Audio chunk
+      if (buf[0] === 0x02) {
+        playPcmAudio(buf.subarray(1));
+        return;
+      }
+
+      // 0x01 = JPEG Video frame
+      if (buf[0] !== 0x01) return;
 
       const now = performance.now();
       const delta = Math.round(now - lastFrameArrival);
@@ -123,7 +180,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
     };
 
     ws.onclose = () => {
-      setStatus((prev) => (prev === 'error' ? 'error' : 'error'));
+      setStatus('error');
       setStatusText((prev) => (prev.startsWith('Gagal') ? prev : 'Koneksi terputus dari HP.'));
       setFps(0);
     };
@@ -134,18 +191,19 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
       connectWebSocket();
       return () => {
         wsRef.current?.close();
+        audioCtxRef.current?.close();
+        audioCtxRef.current = null;
       };
     }
   }, [session]);
 
-  // Recording timer
   useEffect(() => {
     if (!isRecording) { setRecSeconds(0); return; }
     const t = setInterval(() => setRecSeconds(s => s + 1), 1000);
     return () => clearInterval(t);
   }, [isRecording]);
 
-  // Demo simulation animation (only when session.isDemo === true)
+  // Demo simulation animation
   useEffect(() => {
     if (!session.isDemo) return;
     const canvas = canvasRef.current;
@@ -190,7 +248,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
     return () => cancelAnimationFrame(raf);
   }, [session.isDemo, orientation]);
 
-  // Real canvas recording
   const toggleRecord = async () => {
     if (isRecording) {
       recorderRef.current?.stop();
@@ -221,7 +278,6 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
     setIsRecording(true);
   };
 
-  // Real canvas screenshot
   const takeScreenshot = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -236,39 +292,56 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
   const latencyColor = latency < 60 ? 'text-green-600' : latency < 110 ? 'text-yellow-600' : 'text-red-600';
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* ── Top Info Bar ── */}
-      <div className="flex items-center justify-between px-5 py-2.5 bg-white border-b border-slate-100 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <span className={`w-2 h-2 rounded-full ${status === 'live' ? 'bg-green-500 animate-pulse' : status === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`}></span>
-          <span className="text-sm font-medium text-slate-700">{session.deviceName}</span>
-          <span className="text-xs text-slate-400 flex items-center gap-1">
-            {session.connectionType === 'USB' ? <Usb className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
-            {session.connectionType}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-4 text-xs font-medium">
-          <span className={`flex items-center gap-1 ${latencyColor}`}>
-            <Clock className="w-3.5 h-3.5" />
-            {latency} ms
-          </span>
-          <span className="text-slate-400">{fps} FPS</span>
-          {isRecording && (
-            <span className="flex items-center gap-1 text-red-500 font-semibold">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-              REC {fmt(recSeconds)}
+    <div className={`flex flex-col h-full ${isFullScreen ? 'bg-black' : 'bg-slate-50'}`}>
+      {/* ── Top Info Bar (hidden in fullscreen) ── */}
+      {!isFullScreen && (
+        <div className="flex items-center justify-between px-5 py-2.5 bg-white border-b border-slate-100 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2 h-2 rounded-full ${status === 'live' ? 'bg-green-500 animate-pulse' : status === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`}></span>
+            <span className="text-sm font-medium text-slate-700">{session.deviceName}</span>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              {session.connectionType === 'USB' ? <Usb className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+              {session.connectionType}
             </span>
-          )}
+          </div>
+
+          <div className="flex items-center gap-4 text-xs font-medium">
+            <span className={`flex items-center gap-1 ${latencyColor}`}>
+              <Clock className="w-3.5 h-3.5" />
+              {latency} ms
+            </span>
+            <span className="text-slate-400">{fps} FPS</span>
+            {isRecording && (
+              <span className="flex items-center gap-1 text-red-500 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                REC {fmt(recSeconds)}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── Main Area ── */}
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex items-center justify-center p-6 bg-slate-100 relative">
-          <div className={`relative bg-black shadow-2xl rounded-3xl overflow-hidden border-4 border-slate-800 ${
-            orientation === 'portrait' ? 'h-full max-h-[560px] aspect-[9/19.5]' : 'w-full max-w-[720px] aspect-[16/9]'
-          }`}>
+        <div className={`flex-1 flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}>
+          {/* Floating exit fullscreen button */}
+          {isFullScreen && (
+            <button
+              onClick={onToggleFullScreen}
+              className="absolute top-3 right-3 z-30 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white/80 hover:text-white text-xs font-medium backdrop-blur-sm border border-white/15 transition-all"
+            >
+              <Minimize2 className="w-3.5 h-3.5" />
+              Keluar Fullscreen (ESC)
+            </button>
+          )}
+
+          <div
+            className={`relative bg-black overflow-hidden flex items-center justify-center ${
+              isFullScreen
+                ? 'w-full h-full'
+                : 'w-full h-full rounded-2xl shadow-xl border-2 border-slate-800'
+            }`}
+          >
             <canvas
               ref={canvasRef}
               width={canvasSize.width}
@@ -301,75 +374,85 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({ session, onDisconnect })
           </div>
         </div>
 
-        {/* ── Right Controls Panel ── */}
-        <aside className="w-56 border-l border-slate-100 bg-white flex flex-col p-4 gap-2.5 shrink-0">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kontrol</p>
+        {/* ── Right Controls Panel (hidden in fullscreen) ── */}
+        {!isFullScreen && (
+          <aside className="w-52 border-l border-slate-100 bg-white flex flex-col p-4 gap-2.5 shrink-0">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kontrol</p>
 
-          <button
-            onClick={toggleRecord}
-            className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-              isRecording
-                ? 'bg-red-50 border-red-200 text-red-600'
-                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            {isRecording ? (
-              <><Square className="w-4 h-4 fill-red-500 text-red-500" /> Stop Rekam</>
-            ) : (
-              <><Circle className="w-4 h-4 text-red-400" /> Mulai Rekam</>
-            )}
-          </button>
-
-          <button
-            onClick={takeScreenshot}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
-          >
-            <Camera className="w-4 h-4 text-slate-500" />
-            Screenshot
-          </button>
-
-          <button
-            onClick={() => setOrientation(o => o === 'portrait' ? 'landscape' : 'portrait')}
-            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
-          >
-            <RotateCw className="w-4 h-4 text-slate-500" />
-            Putar Layar
-          </button>
-
-          <button
-            onClick={() => setIsAnnotating(a => !a)}
-            className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-              isAnnotating
-                ? 'bg-blue-50 border-blue-200 text-blue-600'
-                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            <PenTool className="w-4 h-4" />
-            {isAnnotating ? 'Selesai Coret' : 'Coret Layar'}
-          </button>
-
-          <button
-            onClick={() => setIsMuted(m => !m)}
-            className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
-              isMuted
-                ? 'bg-orange-50 border-orange-200 text-orange-600'
-                : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
-            }`}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            {isMuted ? 'Suara Mati' : 'Suara Nyala'}
-          </button>
-
-          <div className="mt-auto border-t border-slate-100 pt-3">
             <button
-              onClick={onDisconnect}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all"
+              onClick={onToggleFullScreen}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-brand bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-all"
             >
-              <Power className="w-4 h-4" />
-              Putuskan Koneksi
+              <Maximize2 className="w-4 h-4" />
+              Layar Penuh
             </button>
-          </div>
-        </aside>
+
+            <button
+              onClick={toggleRecord}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                isRecording
+                  ? 'bg-red-50 border-red-200 text-red-600'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              {isRecording ? (
+                <><Square className="w-4 h-4 fill-red-500 text-red-500" /> Stop Rekam</>
+              ) : (
+                <><Circle className="w-4 h-4 text-red-400" /> Mulai Rekam</>
+              )}
+            </button>
+
+            <button
+              onClick={takeScreenshot}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
+            >
+              <Camera className="w-4 h-4 text-slate-500" />
+              Screenshot
+            </button>
+
+            <button
+              onClick={() => setOrientation(o => o === 'portrait' ? 'landscape' : 'portrait')}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
+            >
+              <RotateCw className="w-4 h-4 text-slate-500" />
+              Putar Layar
+            </button>
+
+            <button
+              onClick={() => setIsAnnotating(a => !a)}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                isAnnotating
+                  ? 'bg-blue-50 border-blue-200 text-blue-600'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <PenTool className="w-4 h-4" />
+              {isAnnotating ? 'Selesai Coret' : 'Coret Layar'}
+            </button>
+
+            <button
+              onClick={() => setIsMuted(m => !m)}
+              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                isMuted
+                  ? 'bg-orange-50 border-orange-200 text-orange-600'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {isMuted ? 'Suara Mati' : 'Suara Nyala'}
+            </button>
+
+            <div className="mt-auto border-t border-slate-100 pt-3">
+              <button
+                onClick={onDisconnect}
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all"
+              >
+                <Power className="w-4 h-4" />
+                Putuskan Koneksi
+              </button>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

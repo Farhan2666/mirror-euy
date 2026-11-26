@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximize: () => ipcRenderer.send('window:maximize'),
   close: () => ipcRenderer.send('window:close'),
   toggleAlwaysOnTop: (enable) => ipcRenderer.invoke('window:toggle-always-on-top', enable),
+  setFullScreen: (enable) => ipcRenderer.invoke('window:set-fullscreen', enable),
   preventSleep: (enable) => ipcRenderer.invoke('system:prevent-sleep', enable),
 
   // Device & Mirroring

@@ -79,6 +79,14 @@ ipcMain.handle('window:toggle-always-on-top', (event, enable) => {
   return false;
 });
 
+ipcMain.handle('window:set-fullscreen', (event, enable) => {
+  if (mainWindow) {
+    mainWindow.setFullScreen(!!enable);
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
 // Power Save Blocker for live streamers (prevents sleep during stream)
 ipcMain.handle('system:prevent-sleep', (event, enable) => {
   if (enable) {
