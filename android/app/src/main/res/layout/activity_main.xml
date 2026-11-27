@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8FAFC"
+    android:background="#0D2F3F"
     android:fillViewport="true">
 
     <LinearLayout
@@ -21,6 +21,14 @@
             android:paddingTop="12dp"
             android:paddingBottom="16dp">
 
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="12dp"
+                android:contentDescription="Logo Mirror Euy"
+                android:scaleType="centerCrop"
+                android:src="@drawable/logo_mirror_euy" />
+
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -30,16 +38,16 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Mirror Euy"
-                    android:textColor="#0F172A"
-                    android:textSize="24sp"
+                    android:text="MIRROR EUY"
+                    android:textColor="#2DD4BF"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="HP ke PC Screen Mirroring"
-                    android:textColor="#64748B"
+                    android:textColor="#94B8C4"
                     android:textSize="13sp" />
             </LinearLayout>
 
@@ -47,11 +55,11 @@
                 android:id="@+id/tvBadgeStatus"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="#E2E8F0"
+                android:background="#1E4A5F"
                 android:paddingHorizontal="12dp"
                 android:paddingVertical="6dp"
                 android:text="OFFLINE"
-                android:textColor="#475569"
+                android:textColor="#94B8C4"
                 android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -61,8 +69,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="14dp"
-            android:background="#FFFFFF"
-            android:elevation="1dp"
+            android:background="#133248"
+            android:elevation="2dp"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -70,7 +78,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="METODE KONEKSI"
-                android:textColor="#94A3B8"
+                android:textColor="#67E8F9"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -88,14 +96,20 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="WiFi / LAN" />
+                    android:text="WiFi / LAN"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipUsb"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Kabel USB (ADB)" />
+                    android:text="Kabel USB (ADB)"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
             </com.google.android.material.chip.ChipGroup>
 
             <TextView
@@ -104,7 +118,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="Masukkan IP ini di Mirror Euy PC:"
-                android:textColor="#64748B"
+                android:textColor="#94B8C4"
                 android:textSize="12sp" />
 
             <TextView
@@ -114,7 +128,7 @@
                 android:layout_marginTop="4dp"
                 android:fontFamily="monospace"
                 android:text="192.168.1.x : 8888"
-                android:textColor="#2563EB"
+                android:textColor="#2DD4BF"
                 android:textSize="18sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -124,8 +138,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="14dp"
-            android:background="#FFFFFF"
-            android:elevation="1dp"
+            android:background="#133248"
+            android:elevation="2dp"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -133,7 +147,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="MODE &amp; KUALITAS STREAM"
-                android:textColor="#94A3B8"
+                android:textColor="#67E8F9"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -142,7 +156,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="Mode Tampilan"
-                android:textColor="#334155"
+                android:textColor="#E2F8F5"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -160,14 +174,20 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="Layar HP" />
+                    android:text="Layar HP"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipModeGame"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Game (Low Latency)" />
+                    android:text="Game (Low Latency)"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
             </com.google.android.material.chip.ChipGroup>
 
             <TextView
@@ -175,7 +195,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="Resolusi"
-                android:textColor="#334155"
+                android:textColor="#E2F8F5"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -192,7 +212,10 @@
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="480p (Cepat)" />
+                    android:text="480p (Cepat)"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip720p"
@@ -200,14 +223,20 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="720p (Standar)" />
+                    android:text="720p (Standar)"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip1080p"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="1080p (Tajam)" />
+                    android:text="1080p (Tajam)"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
             </com.google.android.material.chip.ChipGroup>
 
             <TextView
@@ -215,7 +244,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="Frame Rate (FPS)"
-                android:textColor="#334155"
+                android:textColor="#E2F8F5"
                 android:textSize="13sp"
                 android:textStyle="bold" />
 
@@ -233,14 +262,20 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="30 FPS" />
+                    android:text="30 FPS"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chip60fps"
                     style="@style/Widget.Material3.Chip.Filter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="60 FPS" />
+                    android:text="60 FPS"
+                    android:textColor="#E2F8F5"
+                    app:chipBackgroundColor="#0D2F3F"
+                    app:chipStrokeColor="#1E4A5F" />
             </com.google.android.material.chip.ChipGroup>
         </LinearLayout>
 
@@ -249,8 +284,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="18dp"
-            android:background="#FFFFFF"
-            android:elevation="1dp"
+            android:background="#133248"
+            android:elevation="2dp"
             android:orientation="vertical"
             android:padding="16dp">
 
@@ -258,7 +293,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="STATUS REAL-TIME"
-                android:textColor="#94A3B8"
+                android:textColor="#67E8F9"
                 android:textSize="11sp"
                 android:textStyle="bold" />
 
@@ -268,7 +303,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="Siap. Tekan Mulai Mirroring untuk membuka server."
-                android:textColor="#334155"
+                android:textColor="#E2F8F5"
                 android:textSize="13sp" />
 
             <TextView
@@ -278,7 +313,7 @@
                 android:layout_marginTop="4dp"
                 android:fontFamily="monospace"
                 android:text="PC Terhubung: 0 | FPS: 0"
-                android:textColor="#64748B"
+                android:textColor="#94B8C4"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -287,9 +322,9 @@
             android:id="@+id/btnToggleMirror"
             android:layout_width="match_parent"
             android:layout_height="54dp"
-            android:backgroundTint="#2563EB"
+            android:backgroundTint="#14B8A6"
             android:text="Mulai Mirroring"
-            android:textColor="#FFFFFF"
+            android:textColor="#0D2F3F"
             android:textSize="15sp"
             android:textStyle="bold" />
 

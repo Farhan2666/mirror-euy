@@ -156,8 +156,8 @@ class MainActivity : AppCompatActivity() {
 
         if (running) {
             tvBadgeStatus.text = "LIVE"
-            tvBadgeStatus.setBackgroundColor(0xFFDCFCE7.toInt())
-            tvBadgeStatus.setTextColor(0xFF15803D.toInt())
+            tvBadgeStatus.setBackgroundColor(0xFF115E59.toInt())
+            tvBadgeStatus.setTextColor(0xFF2DD4BF.toInt())
             tvStatus.text = if (clients > 0) {
                 "Terhubung ke PC! Layar sedang dikirim."
             } else {
@@ -165,13 +165,15 @@ class MainActivity : AppCompatActivity() {
             }
             btnToggleMirror.text = "Hentikan Mirroring"
             btnToggleMirror.setBackgroundColor(0xFFEF4444.toInt())
+            btnToggleMirror.setTextColor(0xFFFFFFFF.toInt())
         } else {
             tvBadgeStatus.text = "OFFLINE"
-            tvBadgeStatus.setBackgroundColor(0xFFE2E8F0.toInt())
-            tvBadgeStatus.setTextColor(0xFF475569.toInt())
+            tvBadgeStatus.setBackgroundColor(0xFF1E4A5F.toInt())
+            tvBadgeStatus.setTextColor(0xFF94B8C4.toInt())
             tvStatus.text = err ?: "Siap. Tekan Mulai Mirroring untuk membuka server."
             btnToggleMirror.text = "Mulai Mirroring"
-            btnToggleMirror.setBackgroundColor(0xFF2563EB.toInt())
+            btnToggleMirror.setBackgroundColor(0xFF14B8A6.toInt())
+            btnToggleMirror.setTextColor(0xFF0D2F3F.toInt())
         }
 
         tvMetrics.text = "PC Terhubung: $clients | FPS: $fps"

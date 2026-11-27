@@ -1,8 +1,13 @@
 <resources>
-    <style name="Theme.MirrorEuy" parent="Theme.Material3.Light.NoActionBar">
-        <item name="colorPrimary">#2563EB</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="android:statusBarColor">#F8FAFC</item>
-        <item name="android:windowLightStatusBar">true</item>
+    <style name="Theme.MirrorEuy" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#14B8A6</item>
+        <item name="colorOnPrimary">#0D2F3F</item>
+        <item name="colorSecondary">#67E8F9</item>
+        <item name="colorSurface">#133248</item>
+        <item name="colorOnSurface">#E2F8F5</item>
+        <item name="android:windowBackground">#0D2F3F</item>
+        <item name="android:statusBarColor">#0D2F3F</item>
+        <item name="android:navigationBarColor">#0D2F3F</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>
