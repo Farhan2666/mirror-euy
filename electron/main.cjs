@@ -401,7 +401,12 @@ ipcMain.handle('recording:save', async (event, { defaultName, buffer, convertToM
         fs.writeFileSync(tmpPath, Buffer.from(buffer));
 
         let ffmpegPath;
-        try { ffmpegPath = require('ffmpeg-static'); } catch { ffmpegPath = null; }
+        try {
+          const rawFfmpeg = require('ffmpeg-static');
+          ffmpegPath = app.isPackaged ? rawFfmpeg.replace('app.asar', 'app.asar.unpacked') : rawFfmpeg;
+        } catch {
+          ffmpegPath = null;
+        }
 
         if (ffmpegPath && fs.existsSync(ffmpegPath)) {
           await new Promise((resolve, reject) => {
