@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Wifi, Usb, RefreshCw, Smartphone, ChevronRight, Play } from 'lucide-react';
 import { MirrorSession } from '../App';
+import logoImg from '../assets/logo.png';
 
 interface ConnectPageProps {
   onConnect: (session: MirrorSession) => void;
@@ -115,7 +116,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
       {/* ── Left Sidebar: Steps ── */}
       <aside className="w-64 border-r border-brand-navy-border bg-brand-navy-light flex flex-col p-5 gap-6">
         <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-border">
-          <img src="/logo.png" alt="Mirror Euy" className="w-11 h-11 rounded-xl object-cover shadow-md border border-brand-navy-border" />
+          <img src={logoImg} alt="Mirror Euy" className="w-11 h-11 rounded-xl object-cover shadow-md border border-brand-navy-border" />
           <div>
             <p className="text-sm font-bold tracking-wide text-brand-light">MIRROR EUY</p>
             <p className="text-[11px] text-brand-cyan/70">Screen &amp; Audio Mirroring</p>

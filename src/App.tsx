@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Minus, Square, X } from 'lucide-react';
 import { ConnectPage } from './pages/ConnectPage';
 import { MirrorPage } from './pages/MirrorPage';
+import logoImg from './assets/logo.png';
 
 export interface MirrorSession {
   deviceName: string;
@@ -54,7 +55,7 @@ export const App: React.FC = () => {
       {!hideChrome && (
         <div className="app-drag flex items-center justify-between h-10 px-3 border-b border-brand-navy-border bg-brand-navy shrink-0">
           <div className="app-no-drag flex items-center gap-2">
-            <img src="/logo.png" alt="Mirror Euy" className="w-6 h-6 rounded object-cover" />
+            <img src={logoImg} alt="Mirror Euy" className="w-6 h-6 rounded object-cover" />
             <span className="text-sm font-bold tracking-wide" style={{ color: '#2DD4BF' }}>MIRROR EUY</span>
           </div>
 
