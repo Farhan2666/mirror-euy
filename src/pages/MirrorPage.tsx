@@ -618,7 +618,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
   };
 
   const fmt = (s: number) => `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(s % 60).padStart(2,'0')}`;
-  const latencyColor = latency < 60 ? 'text-green-600' : latency < 110 ? 'text-yellow-600' : 'text-red-600';
+  const latencyColor = latency < 60 ? 'text-brand-light' : latency < 110 ? 'text-amber-400' : 'text-red-400';
 
   const scale = Math.min(
     boxSize.width / Math.max(1, canvasSize.width),
@@ -741,15 +741,15 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
   // ── Normal layout ──────────────────────────────────────────────────────────
   return (
-    <div className={`flex flex-col h-full ${isFullScreen ? 'bg-black' : 'bg-slate-50'}`}>
+    <div className={`flex flex-col h-full ${isFullScreen ? 'bg-black' : 'bg-brand-navy text-[#E2F8F5]'}`}>
       {/* ── Top Info Bar (hidden in fullscreen) ── */}
       {!isFullScreen && (
-        <div className="flex items-center justify-between px-5 py-2.5 bg-white border-b border-slate-100 shrink-0">
+        <div className="flex items-center justify-between px-5 py-2.5 bg-brand-navy-light border-b border-brand-navy-border shrink-0">
           <div className="flex items-center gap-2.5">
-            <span className={`w-2 h-2 rounded-full ${status === 'live' ? 'bg-green-500 animate-pulse' : status === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`}></span>
-            <span className="text-sm font-medium text-slate-700">{session.deviceName}</span>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              {session.connectionType === 'USB' ? <Usb className="w-3 h-3" /> : <Wifi className="w-3 h-3" />}
+            <span className={`w-2 h-2 rounded-full ${status === 'live' ? 'bg-brand-light animate-pulse' : status === 'connecting' ? 'bg-yellow-400 animate-pulse' : 'bg-red-500'}`}></span>
+            <span className="text-sm font-medium text-[#E2F8F5]">{session.deviceName}</span>
+            <span className="text-xs text-[#94B8C4] flex items-center gap-1">
+              {session.connectionType === 'USB' ? <Usb className="w-3 h-3 text-brand-cyan" /> : <Wifi className="w-3 h-3 text-brand-cyan" />}
               {session.connectionType}
             </span>
           </div>
@@ -759,9 +759,9 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               <Clock className="w-3.5 h-3.5" />
               {latency} ms
             </span>
-            <span className="text-slate-400">{fps} FPS</span>
+            <span className="text-brand-cyan/80">{fps} FPS</span>
             {isRecording && (
-              <span className="flex items-center gap-1 text-red-500 font-semibold">
+              <span className="flex items-center gap-1 text-red-400 font-semibold">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                 REC {fmt(recSeconds)}
               </span>
@@ -774,7 +774,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
       <div className="flex-1 min-h-0 flex overflow-hidden">
         <div
           ref={containerRef}
-          className={`flex-1 min-w-0 min-h-0 overflow-hidden flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-slate-100'}`}
+          className={`flex-1 min-w-0 min-h-0 overflow-hidden flex items-center justify-center relative ${isFullScreen ? 'p-0 bg-black' : 'p-3 bg-brand-navy'}`}
         >
           {/* Floating exit fullscreen button */}
           {isFullScreen && (
@@ -792,7 +792,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             className={`relative flex items-center justify-center bg-black overflow-hidden ${
               isFullScreen
                 ? ''
-                : 'rounded-2xl shadow-xl border-2 border-slate-800'
+                : 'rounded-2xl shadow-2xl shadow-black/50 border-2 border-brand-navy-border'
             }`}
             style={{
               width: `${displayWidth}px`,
@@ -817,7 +817,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             {/* Tap ripple feedback */}
             {tapRipple && (
               <div
-                className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-blue-400/50 border-2 border-white pointer-events-none animate-ping"
+                className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-brand-light/50 border-2 border-brand-cyan pointer-events-none animate-ping"
                 style={{ left: tapRipple.x, top: tapRipple.y }}
               />
             )}
@@ -825,21 +825,21 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             {/* Toast unlock audio */}
             {status === 'live' && !audioUnlocked && !isMuted && (
               <div
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 rounded-full bg-black/70 backdrop-blur-sm border border-white/20 text-white text-xs font-medium cursor-pointer select-none"
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-2 rounded-full bg-brand-navy/90 backdrop-blur-sm border border-brand/40 text-[#E2F8F5] text-xs font-medium cursor-pointer select-none"
                 onClick={unlockAudio}
               >
-                <Volume2 className="w-3.5 h-3.5 text-green-400 animate-pulse" />
+                <Volume2 className="w-3.5 h-3.5 text-brand-light animate-pulse" />
                 Klik layar untuk aktifkan suara
               </div>
             )}
 
             {status !== 'live' && (
-              <div className="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center p-6 text-center gap-3">
-                <p className="text-sm text-white font-medium">{statusText}</p>
+              <div className="absolute inset-0 bg-brand-navy/95 flex flex-col items-center justify-center p-6 text-center gap-3">
+                <p className="text-sm text-[#E2F8F5] font-medium">{statusText}</p>
                 {status === 'error' && (
                   <button
                     onClick={connectWebSocket}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-brand text-brand-navy text-xs font-semibold rounded-lg hover:bg-brand-light transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
                     Coba Hubungkan Lagi
@@ -849,8 +849,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             )}
 
             {isAnnotating && (
-              <div className="absolute inset-0 cursor-crosshair bg-blue-500/5 border-2 border-dashed border-blue-400 pointer-events-none">
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-xs px-3 py-1 rounded-full font-medium">
+              <div className="absolute inset-0 cursor-crosshair bg-brand/5 border-2 border-dashed border-brand-light pointer-events-none">
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-brand text-brand-navy text-xs px-3 py-1 rounded-full font-semibold">
                   Mode Anotasi Aktif
                 </div>
               </div>
@@ -860,12 +860,12 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
         {/* ── Right Controls Panel (hidden in fullscreen) ── */}
         {!isFullScreen && (
-          <aside className="w-52 border-l border-slate-100 bg-white flex flex-col p-4 gap-2.5 shrink-0">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Kontrol</p>
+          <aside className="w-52 border-l border-brand-navy-border bg-brand-navy-light flex flex-col p-4 gap-2.5 shrink-0">
+            <p className="text-xs font-semibold text-brand-cyan/70 uppercase tracking-wider">Kontrol</p>
 
             <button
               onClick={onToggleFullScreen}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-brand bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-all"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-brand-cyan bg-brand/15 border border-brand/30 hover:bg-brand/25 transition-all"
             >
               <Maximize2 className="w-4 h-4" />
               Layar Penuh
@@ -875,7 +875,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
             <button
               onClick={() => onSetStreamMode(true)}
               title="Jendela bersih tanpa bingkai untuk Window Capture di OBS / TikTok Studio (F10)"
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-purple-700 bg-purple-50 border border-purple-200 hover:bg-purple-100 transition-all"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-purple-300 bg-purple-500/15 border border-purple-500/30 hover:bg-purple-500/25 transition-all"
             >
               <Tv2 className="w-4 h-4" />
               Mode OBS / TT Studio
@@ -885,8 +885,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               onClick={toggleRecord}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
                 isRecording
-                  ? 'bg-red-50 border-red-200 text-red-600'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                  : 'bg-brand-navy border-brand-navy-border text-[#E2F8F5] hover:border-brand-light/50'
               }`}
             >
               {isRecording ? (
@@ -898,17 +898,17 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
             <button
               onClick={takeScreenshot}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium bg-brand-navy text-[#E2F8F5] border border-brand-navy-border hover:border-brand-light/50 transition-all"
             >
-              <Camera className="w-4 h-4 text-slate-500" />
+              <Camera className="w-4 h-4 text-brand-cyan" />
               Screenshot
             </button>
 
             <button
               onClick={() => setOrientation(o => o === 'portrait' ? 'landscape' : 'portrait')}
-              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 border border-slate-200 hover:border-slate-300 transition-all"
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium bg-brand-navy text-[#E2F8F5] border border-brand-navy-border hover:border-brand-light/50 transition-all"
             >
-              <RotateCw className="w-4 h-4 text-slate-500" />
+              <RotateCw className="w-4 h-4 text-brand-cyan" />
               Putar Layar
             </button>
 
@@ -916,8 +916,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               onClick={() => setIsAnnotating(a => !a)}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
                 isAnnotating
-                  ? 'bg-blue-50 border-blue-200 text-blue-600'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  ? 'bg-brand/20 border-brand-light text-brand-cyan'
+                  : 'bg-brand-navy border-brand-navy-border text-[#E2F8F5] hover:border-brand-light/50'
               }`}
             >
               <PenTool className="w-4 h-4" />
@@ -928,11 +928,11 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               onClick={() => setIsMuted(m => !m)}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
                 isMuted
-                  ? 'bg-orange-50 border-orange-200 text-orange-600'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  ? 'bg-orange-500/15 border-orange-500/30 text-orange-300'
+                  : 'bg-brand-navy border-brand-navy-border text-[#E2F8F5] hover:border-brand-light/50'
               }`}
             >
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-brand-light" />}
               {isMuted ? 'Suara Mati' : 'Suara Nyala'}
             </button>
 
@@ -940,8 +940,8 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
               onClick={() => setIsControlEnabled(c => !c)}
               className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium transition-all border ${
                 isControlEnabled && adbReady
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  ? 'bg-brand/20 border-brand-light/50 text-brand-light'
+                  : 'bg-brand-navy border-brand-navy-border text-[#E2F8F5] hover:border-brand-light/50'
               }`}
               title={adbReady ? 'Klik, geser, scroll, & ketik di layar HP dari PC' : 'Colok kabel USB + USB Debugging untuk kontrol'}
             >
@@ -951,13 +951,13 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
 
             {/* Navigasi Android (Back / Home / Recent) */}
             <div className="pt-1">
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Navigasi HP</p>
+              <p className="text-[11px] font-semibold text-brand-cyan/70 uppercase tracking-wider mb-1.5">Navigasi HP</p>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
                   onClick={() => sendNavKey(4)}
                   disabled={!adbReady || session.isDemo}
                   title="Kembali (Back)"
-                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                  className="flex items-center justify-center py-2 rounded-xl bg-brand-navy border border-brand-navy-border text-brand-cyan hover:border-brand-light hover:text-[#E2F8F5] disabled:opacity-40 transition-all"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
@@ -965,7 +965,7 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
                   onClick={() => sendNavKey(3)}
                   disabled={!adbReady || session.isDemo}
                   title="Beranda (Home)"
-                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                  className="flex items-center justify-center py-2 rounded-xl bg-brand-navy border border-brand-navy-border text-brand-cyan hover:border-brand-light hover:text-[#E2F8F5] disabled:opacity-40 transition-all"
                 >
                   <Home className="w-4 h-4" />
                 </button>
@@ -973,17 +973,17 @@ export const MirrorPage: React.FC<MirrorPageProps> = ({
                   onClick={() => sendNavKey(187)}
                   disabled={!adbReady || session.isDemo}
                   title="Recent Apps"
-                  className="flex items-center justify-center py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-all"
+                  className="flex items-center justify-center py-2 rounded-xl bg-brand-navy border border-brand-navy-border text-brand-cyan hover:border-brand-light hover:text-[#E2F8F5] disabled:opacity-40 transition-all"
                 >
                   <Layers className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <div className="mt-auto border-t border-slate-100 pt-3">
+            <div className="mt-auto border-t border-brand-navy-border pt-3">
               <button
                 onClick={onDisconnect}
-                className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50 border border-transparent hover:border-red-200 transition-all"
+                className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/15 border border-transparent hover:border-red-500/30 transition-all"
               >
                 <Power className="w-4 h-4" />
                 Putuskan Koneksi

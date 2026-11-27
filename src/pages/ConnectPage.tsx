@@ -111,31 +111,39 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-brand-navy text-[#E2F8F5]">
       {/* ── Left Sidebar: Steps ── */}
-      <aside className="w-64 border-r border-slate-100 bg-slate-50 flex flex-col p-5 gap-6">
+      <aside className="w-64 border-r border-brand-navy-border bg-brand-navy-light flex flex-col p-5 gap-6">
+        <div className="flex items-center gap-3 pb-4 border-b border-brand-navy-border">
+          <img src="/logo.png" alt="Mirror Euy" className="w-11 h-11 rounded-xl object-cover shadow-md border border-brand-navy-border" />
+          <div>
+            <p className="text-sm font-bold tracking-wide text-brand-light">MIRROR EUY</p>
+            <p className="text-[11px] text-brand-cyan/70">Screen &amp; Audio Mirroring</p>
+          </div>
+        </div>
+
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Cara Koneksi</p>
+          <p className="text-xs font-semibold text-brand-cyan/70 uppercase tracking-wider mb-3">Cara Koneksi</p>
           <div className="flex flex-col gap-4">
             <div className="flex gap-3">
-              <div className="w-6 h-6 rounded-full bg-brand text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</div>
+              <div className="w-6 h-6 rounded-full bg-brand text-brand-navy text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</div>
               <div>
-                <p className="text-sm font-medium text-slate-700">Buka App di HP</p>
-                <p className="text-xs text-slate-400 mt-0.5">Buka <strong>Mirror Euy</strong> di HP → tekan <strong>Mulai Mirroring</strong></p>
+                <p className="text-sm font-medium text-[#E2F8F5]">Buka App di HP</p>
+                <p className="text-xs text-[#94B8C4] mt-0.5">Buka <strong className="text-brand-cyan">Mirror Euy</strong> di HP → tekan <strong className="text-brand-cyan">Mulai Mirroring</strong></p>
               </div>
             </div>
             <div className="flex gap-3">
-              <div className="w-6 h-6 rounded-full bg-brand text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</div>
+              <div className="w-6 h-6 rounded-full bg-brand text-brand-navy text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</div>
               <div>
-                <p className="text-sm font-medium text-slate-700">Satu WiFi / USB</p>
-                <p className="text-xs text-slate-400 mt-0.5">Pastikan HP &amp; PC di WiFi yang sama, atau colok kabel USB</p>
+                <p className="text-sm font-medium text-[#E2F8F5]">Satu WiFi / USB</p>
+                <p className="text-xs text-[#94B8C4] mt-0.5">Pastikan HP &amp; PC di WiFi yang sama, atau colok kabel USB</p>
               </div>
             </div>
             <div className="flex gap-3">
-              <div className="w-6 h-6 rounded-full bg-brand text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</div>
+              <div className="w-6 h-6 rounded-full bg-brand text-brand-navy text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</div>
               <div>
-                <p className="text-sm font-medium text-slate-700">Klik Hubungkan</p>
-                <p className="text-xs text-slate-400 mt-0.5">Klik perangkat yang terdeteksi atau ketik IP dari layar HP</p>
+                <p className="text-sm font-medium text-[#E2F8F5]">Klik Hubungkan</p>
+                <p className="text-xs text-[#94B8C4] mt-0.5">Klik perangkat yang terdeteksi atau ketik IP dari layar HP</p>
               </div>
             </div>
           </div>
@@ -151,26 +159,26 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                 connectionType: 'WiFi',
               })
             }
-            className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-600 hover:border-brand hover:text-brand transition-colors"
+            className="flex items-center justify-center gap-1.5 w-full py-2 px-3 rounded-lg border border-brand-navy-border bg-brand-navy text-xs font-medium text-[#94B8C4] hover:border-brand-light hover:text-brand-cyan transition-colors"
           >
             <Play className="w-3.5 h-3.5" />
             Coba Mode Simulasi (Tanpa HP)
           </button>
 
           {localIps.length > 0 && (
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-100">
-              <p className="text-xs font-semibold text-blue-700 mb-0.5">IP WiFi PC Kamu</p>
-              <p className="text-xs font-mono text-blue-600">{localIps.join(', ')}</p>
+            <div className="p-3 rounded-xl bg-brand/10 border border-brand/30">
+              <p className="text-xs font-semibold text-brand-light mb-0.5">IP WiFi PC Kamu</p>
+              <p className="text-xs font-mono text-brand-cyan">{localIps.join(', ')}</p>
             </div>
           )}
         </div>
       </aside>
 
       {/* ── Main Area ── */}
-      <main className="flex-1 flex flex-col p-8 overflow-y-auto">
+      <main className="flex-1 flex flex-col p-8 overflow-y-auto bg-brand-navy">
         <div className="mb-6">
-          <h1 className="text-xl font-semibold text-slate-800">Hubungkan Perangkat</h1>
-          <p className="text-sm text-slate-400 mt-1">Pastikan tombol <strong>Mulai Mirroring</strong> di HP sudah ditekan sebelum memindai</p>
+          <h1 className="text-xl font-semibold text-[#E2F8F5]">Hubungkan Perangkat</h1>
+          <p className="text-sm text-[#94B8C4] mt-1">Pastikan tombol <strong className="text-brand-cyan">Mulai Mirroring</strong> di HP sudah ditekan sebelum memindai</p>
         </div>
 
         {/* Method Tabs */}
@@ -179,8 +187,8 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
             onClick={() => { setMethod('wifi'); setErrorMsg(''); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
               method === 'wifi'
-                ? 'bg-brand text-white border-brand'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-brand hover:text-brand'
+                ? 'bg-brand text-brand-navy border-brand font-semibold'
+                : 'bg-brand-navy-light text-[#94B8C4] border-brand-navy-border hover:border-brand-light hover:text-brand-cyan'
             }`}
           >
             <Wifi className="w-4 h-4" />
@@ -190,8 +198,8 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
             onClick={() => { setMethod('usb'); setErrorMsg(''); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
               method === 'usb'
-                ? 'bg-brand text-white border-brand'
-                : 'bg-white text-slate-600 border-slate-200 hover:border-brand hover:text-brand'
+                ? 'bg-brand text-brand-navy border-brand font-semibold'
+                : 'bg-brand-navy-light text-[#94B8C4] border-brand-navy-border hover:border-brand-light hover:text-brand-cyan'
             }`}
           >
             <Usb className="w-4 h-4" />
@@ -200,7 +208,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600">
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300">
             {errorMsg}
           </div>
         )}
@@ -209,13 +217,13 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
         {method === 'wifi' && (
           <div className="flex-1 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-600">
+              <p className="text-sm font-medium text-[#94B8C4]">
                 {scanning ? 'Memindai jaringan WiFi (port 8888)...' : `${wifiDevices.length} perangkat WiFi terdeteksi`}
               </p>
               <button
                 onClick={scan}
                 disabled={scanning}
-                className="flex items-center gap-1.5 text-xs text-brand hover:text-brand-dark font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 text-xs text-brand-light hover:text-brand-cyan font-medium transition-colors disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${scanning ? 'animate-spin' : ''}`} />
                 {scanning ? 'Memindai...' : 'Pindai Ulang'}
@@ -227,24 +235,24 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                 {wifiDevices.map(dev => (
                   <div
                     key={dev.id}
-                    className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-brand hover:shadow-sm transition-all"
+                    className="flex items-center justify-between p-4 bg-brand-navy-light border border-brand-navy-border rounded-xl hover:border-brand-light hover:shadow-lg hover:shadow-brand/10 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                        <Smartphone className="w-5 h-5 text-brand" />
+                      <div className="w-10 h-10 rounded-xl bg-brand/15 border border-brand/30 flex items-center justify-center">
+                        <Smartphone className="w-5 h-5 text-brand-light" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{dev.name}</p>
+                        <p className="text-sm font-medium text-[#E2F8F5]">{dev.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                          <span className="text-xs text-slate-400 font-mono">ws://{dev.ip}:{dev.port}</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand-light"></span>
+                          <span className="text-xs text-[#94B8C4] font-mono">ws://{dev.ip}:{dev.port}</span>
                         </div>
                       </div>
                     </div>
 
                     <button
                       onClick={() => handleConnectWifiDevice(dev)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark transition-colors"
+                      className="flex items-center gap-1.5 px-4 py-2 bg-brand text-brand-navy text-sm font-semibold rounded-lg hover:bg-brand-light transition-colors"
                     >
                       Hubungkan
                       <ChevronRight className="w-4 h-4" />
@@ -253,21 +261,21 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                 ))}
               </div>
             ) : (
-              <div className="p-5 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center">
-                <Wifi className="w-6 h-6 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-600">
+              <div className="p-5 rounded-xl border border-dashed border-brand-navy-border bg-brand-navy-light/50 text-center">
+                <Wifi className="w-6 h-6 text-brand/50 mx-auto mb-2" />
+                <p className="text-sm font-medium text-[#E2F8F5]">
                   {scanning ? 'Sedang mencari HP di jaringan WiFi...' : 'Belum ada HP yang terdeteksi otomatis'}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Pastikan di HP kamu sudah menekan <strong>Mulai Mirroring</strong> (status LIVE), lalu klik <strong>Pindai Ulang</strong>.
+                <p className="text-xs text-[#94B8C4] mt-1">
+                  Pastikan di HP kamu sudah menekan <strong className="text-brand-cyan">Mulai Mirroring</strong> (status LIVE), lalu klik <strong className="text-brand-cyan">Pindai Ulang</strong>.
                 </p>
               </div>
             )}
 
             {/* Manual IP fallback */}
-            <div className="p-5 rounded-xl border border-slate-200 bg-white">
-              <p className="text-sm font-medium text-slate-700 mb-1">Atau Masukkan IP HP Manual</p>
-              <p className="text-xs text-slate-400 mb-3">
+            <div className="p-5 rounded-xl border border-brand-navy-border bg-brand-navy-light">
+              <p className="text-sm font-medium text-[#E2F8F5] mb-1">Atau Masukkan IP HP Manual</p>
+              <p className="text-xs text-[#94B8C4] mb-3">
                 Ketik angka IP yang tampil di aplikasi Mirror Euy HP kamu (tanpa port, atau lengkap dengan `:8888`):
               </p>
               <div className="flex gap-2">
@@ -276,11 +284,11 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                   value={manualIp}
                   onChange={(e) => setManualIp(e.target.value)}
                   placeholder="Contoh: 192.168.1.105"
-                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand text-slate-700"
+                  className="flex-1 bg-brand-navy border border-brand-navy-border rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-brand-light text-[#E2F8F5] placeholder-[#94B8C4]/50"
                 />
                 <button
                   onClick={handleConnectWifiManual}
-                  className="px-5 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark transition-colors"
+                  className="px-5 py-2 bg-brand text-brand-navy text-sm font-semibold rounded-lg hover:bg-brand-light transition-colors"
                 >
                   Hubungkan
                 </button>
@@ -293,13 +301,13 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
         {method === 'usb' && (
           <div className="flex-1 flex flex-col gap-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-600">
+              <p className="text-sm font-medium text-[#94B8C4]">
                 {scanning ? 'Mencari perangkat USB...' : `${usbDevices.length} perangkat USB terdeteksi`}
               </p>
               <button
                 onClick={scan}
                 disabled={scanning}
-                className="flex items-center gap-1.5 text-xs text-brand hover:text-brand-dark font-medium transition-colors"
+                className="flex items-center gap-1.5 text-xs text-brand-light hover:text-brand-cyan font-medium transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${scanning ? 'animate-spin' : ''}`} />
                 Pindai Ulang
@@ -311,17 +319,17 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                 {usbDevices.map(dev => (
                   <div
                     key={dev.id}
-                    className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:border-brand hover:shadow-sm transition-all"
+                    className="flex items-center justify-between p-4 bg-brand-navy-light border border-brand-navy-border rounded-xl hover:border-brand-light hover:shadow-lg hover:shadow-brand/10 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-                        <Smartphone className="w-5 h-5 text-slate-500" />
+                      <div className="w-10 h-10 rounded-xl bg-brand/15 border border-brand/30 flex items-center justify-center">
+                        <Smartphone className="w-5 h-5 text-brand-light" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{dev.name}</p>
+                        <p className="text-sm font-medium text-[#E2F8F5]">{dev.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${dev.status === 'ready' ? 'bg-green-500' : 'bg-orange-400'}`}></span>
-                          <span className="text-xs text-slate-400">
+                          <span className={`w-1.5 h-1.5 rounded-full ${dev.status === 'ready' ? 'bg-brand-light' : 'bg-orange-400'}`}></span>
+                          <span className="text-xs text-[#94B8C4]">
                             USB · {dev.serial} · {dev.status === 'ready' ? 'Siap' : 'Perlu izinkan USB Debugging di HP'}
                           </span>
                         </div>
@@ -330,7 +338,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
 
                     <button
                       onClick={() => handleConnectUsb(dev)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-sm font-medium rounded-lg hover:bg-brand-dark transition-colors"
+                      className="flex items-center gap-1.5 px-4 py-2 bg-brand text-brand-navy text-sm font-semibold rounded-lg hover:bg-brand-light transition-colors"
                     >
                       Hubungkan
                       <ChevronRight className="w-4 h-4" />
@@ -339,13 +347,13 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ onConnect }) => {
                 ))}
               </div>
             ) : (
-              <div className="p-6 rounded-xl border border-dashed border-slate-200 bg-slate-50 text-center">
-                <Usb className="w-7 h-7 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-600">
+              <div className="p-6 rounded-xl border border-dashed border-brand-navy-border bg-brand-navy-light/50 text-center">
+                <Usb className="w-7 h-7 text-brand/50 mx-auto mb-2" />
+                <p className="text-sm font-medium text-[#E2F8F5]">
                   {hasAdb ? 'Belum ada HP yang terhubung via USB' : 'ADB belum terdeteksi di PATH'}
                 </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  Colokkan HP ke PC dengan kabel data, aktifkan <strong>USB Debugging</strong> di Developer Options, lalu klik <strong>Pindai Ulang</strong>.
+                <p className="text-xs text-[#94B8C4] mt-1">
+                  Colokkan HP ke PC dengan kabel data, aktifkan <strong className="text-brand-cyan">USB Debugging</strong> di Developer Options, lalu klik <strong className="text-brand-cyan">Pindai Ulang</strong>.
                 </p>
               </div>
             )}
