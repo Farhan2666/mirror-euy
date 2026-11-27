@@ -25,7 +25,9 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: false,
     },
-    icon: fs.existsSync(path.join(__dirname, '../public/logo.png')) ? path.join(__dirname, '../public/logo.png') : undefined,
+    icon: fs.existsSync(path.join(__dirname, '../public/icon.ico'))
+      ? path.join(__dirname, '../public/icon.ico')
+      : (fs.existsSync(path.join(__dirname, '../public/logo.png')) ? path.join(__dirname, '../public/logo.png') : undefined),
     show: false,
   });
 
